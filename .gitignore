@@ -1,0 +1,49 @@
+# Local agent instructions and MCP credentials
+/AGENTS.md
+/.mcp.json
+/.codex/
+
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+*.local
+*.secrets.json
+
+# Build outputs and dependencies
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+**/.next/
+**/.turbo/
+**/TestResults/
+**/artifacts/
+
+# IDE and OS files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# Runtime data and downloaded content
+/data/
+/downloads/
+/library/
+/logs/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.cbz
+*.cbr
+*.pdf
+*.epub
+*.torrent
+*.nzb

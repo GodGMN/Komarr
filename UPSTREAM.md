@@ -10,3 +10,12 @@ Komarr imports source from [Rorqualx/Librarr](https://github.com/Rorqualx/Librar
 - The inherited lock-threads and live OpenLibrary integration workflows are manual-only until Komarr's CI is adapted.
 
 To inspect the exact imported source later, run `git show 4cbee9df11489ff469a8b1d99cb75c73008e75a4:<path>` or compare that commit with the Komarr merge commit.
+
+## Import build check
+
+The inherited application source in `src/` and `frontend/` matches the pinned upstream commit. The following checks passed before domain changes:
+
+- Node 24.13.0 and Yarn 1.22.22: `corepack yarn install --frozen-lockfile --network-timeout 120000`, then `corepack yarn build --env production`.
+- A fresh full clone with .NET SDK 10.0.401: `dotnet build src/Readarr.sln -c Release -p:Platform=Posix -v quiet`. It finished with zero errors and 180 warnings, including inherited NuGet vulnerability advisories.
+
+The local import checkout uses Git's partial-clone repository format 1, which the inherited SourceLink 1.1.1 package cannot read. The backend check therefore used a fresh full clone from the pushed Komarr branch, whose repository format is 0.

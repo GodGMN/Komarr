@@ -1,0 +1,52 @@
+# Config format for actions/labeler v5+.
+#
+# v4 took a bare list of globs under each label. v5 redesigned the schema
+# to allow matching on branch names as well as files, so every rule now
+# nests under an explicit match type. The old format is not accepted by
+# v5+ — it fails the config parse rather than silently matching nothing.
+#
+# `any-glob-to-any-file` is the v5 equivalent of the v4 default: apply the
+# label if ANY listed glob matches ANY changed file.
+#
+# This workflow runs on pull_request_target, which never appears in normal
+# push CI, so a broken config here surfaces on the next pull request
+# rather than on the commit that broke it.
+
+'Area: API':
+  - changed-files:
+      - any-glob-to-any-file: 'src/Readarr.Api.V1/**/*'
+
+'Area: Db-migration':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/Datastore/Migration/*'
+
+'Area: Download Clients':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/Download/Clients/**/*'
+
+'Area: Import Lists':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/ImportLists/**/*'
+
+'Area: Indexer':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/Indexers/**/*'
+
+'Area: Notifications':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/Notifications/**/*'
+
+'Area: Organizer':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/Organizer/**/*'
+
+'Area: Parser':
+  - changed-files:
+      - any-glob-to-any-file: 'src/NzbDrone.Core/Parser/**/*'
+
+'Area: UI':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'frontend/**/*'
+          - 'package.json'
+          - 'yarn.lock'

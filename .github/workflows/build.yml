@@ -1,0 +1,590 @@
+# Librarr build pipeline — Phase 0 skeleton.
+#
+# Goal: prove that the inherited `./build.sh` and `./test.sh` scripts run
+# green on GitHub Actions runners. Multi-OS matrix, packaging, installer
+# signing, and release publishing are deliberately out of scope here and
+# will be added in Phase 9 alongside the version reset to 1.0.0-beta.1.
+#
+# Cross-reference: ../../azure-pipelines.yml is the upstream Azure
+# Pipelines definition, kept as a stage-for-stage reference during the
+# Phase 0 cutover.
+
+name: Build
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'librarr/**'
+    paths-ignore:
+      - '**/*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - 'src/Readarr.Api.*/openapi.json'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths-ignore:
+      - '**/*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'src/Readarr.Api.*/openapi.json'
+  workflow_dispatch:
+
+env:
+  # Keep in sync with azure-pipelines.yml:28 (`dotnetVersion`) and
+  # global.json until that file is removed.
+  DOTNET_VERSION: '10.0.x'
+  # Node 20 went EOL 2026-04-30. 24 is the current LTS (until 2028-04-30),
+  # which outlives the .NET 10 support window this repo is pinned to.
+  # Keep in sync with .nvmrc, package.json `engines`/`volta`, and
+  # distribution/docker/Dockerfile.
+  NODE_VERSION: '24.x'
+  # Phase 9 version reset. The fork starts its own 1.0.0-beta.x line
+  # rather than continuing the inherited Readarr 0.4.x numbering — the
+  # metadata-source overhaul + UI wizard + the fork's CI/branding/CLA
+  # changes are a different product even if the codebase is shared.
+  # GITHUB_RUN_NUMBER acts as the build counter (1.2.2-beta.N).
+  # release.yml does NOT read this — it takes the version from the tag
+  # name — so this line only sets what untagged dev builds call
+  # themselves. Bump it when a release tag moves the line forward.
+  MAJOR_VERSION: '1.2.2-beta'
+
+jobs:
+  variables:
+    name: Set variables
+    runs-on: ubuntu-22.04
+    outputs:
+      readarrVersion: ${{ steps.set.outputs.readarrVersion }}
+    steps:
+      - id: set
+        shell: bash
+        run: |
+          VERSION="${MAJOR_VERSION}.${GITHUB_RUN_NUMBER}"
+          echo "readarrVersion=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Build version: ${VERSION}"
+
+  build-backend:
+    name: Build backend (Linux)
+    needs: variables
+    runs-on: ubuntu-22.04
+    env:
+      READARRVERSION: ${{ needs.variables.outputs.readarrVersion }}
+      # StyleCop runs only on the Linux leg upstream — mirror that here.
+      EnableAnalyzers: 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build backend
+        shell: bash
+        # --enable-extra-platforms (freebsd-x64 + linux-x86) is deferred:
+        # the .NET SDK stopped shipping runtime packs for those RIDs. The
+        # two escape hatches this comment used to name are both spent --
+        # global.json now pins the SDK and the target framework is net10.0 --
+        # so re-enabling means patching the SDK's bundled-versions file,
+        # which build.sh already does behind
+        # `--enable-extra-platforms-in-sdk`. There used to be a step here
+        # that inlined that patch by hand; it selected the SDK with
+        # `find | head -1`, which on a runner carrying three SDKs picked
+        # 8.0.423 while the build ran on 10.0.302, and then reported
+        # success. Deleted rather than repaired -- build.sh owns this.
+        run: ./build.sh --backend
+
+      - name: Upload backend output
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-linux
+          path: |
+            _output/
+            _tests/
+          retention-days: 7
+          if-no-files-found: error
+
+  build-frontend:
+    name: Build frontend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Build frontend
+        shell: bash
+        env:
+          FORCE_COLOR: '0'
+        run: ./build.sh --frontend
+
+      - name: Upload UI output
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-ui
+          path: _output/UI/
+          retention-days: 7
+          if-no-files-found: error
+
+  unit-tests:
+    name: Unit tests (Linux)
+    needs: build-backend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download backend output
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-linux
+          path: .
+
+      - name: Restore exec bits on published test artifacts
+        # actions/upload-artifact strips POSIX exec bits on non-Windows.
+        # test.sh + Readarr.Test.Dummy need them back before invocation.
+        shell: bash
+        run: |
+          chmod +x test.sh
+          chmod +x _tests/net10.0/linux-x64/publish/Readarr.Test.Dummy 2>/dev/null || true
+
+      - name: Run unit tests with coverage
+        shell: bash
+        env:
+          # Per azure-pipelines.yml:1219 — test.sh's assembly-discovery loop
+          # expects the test DLLs at $TEST_DIR/<DLL>.dll, which after build
+          # live under _tests/net10.0/<rid>/publish/. Without this, vstest
+          # is handed nonexistent file paths and reports "Failed tests: 1"
+          # while exiting 0 — i.e., the suite never actually runs.
+          #
+          # Which is exactly what happened: the .NET 10 migration left this at
+          # net6.0 and this job has been failing on main ever since, with the
+          # symptom the comment above already described.
+          TEST_DIR: _tests/net10.0/linux-x64/publish
+        run: ./test.sh Linux Unit Coverage
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-linux
+          path: |
+            TestResult.xml
+            TestLog.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
+  unit-tests-debug:
+    # Issue #12. The "Unit tests (Linux)" job above runs the *published
+    # Release* artifacts, so BuildInfo.IsDebug is false and LoggingTest's
+    # AssertNoUnexpectedLogs teardown — the assertion that fails a test which
+    # logged an undeclared Warn/Error/Fatal — never fires there. Eleven such
+    # tests rode into main that way before anyone noticed (see #11). This job
+    # builds and runs the unit suites in Debug so that assertion is actually
+    # exercised on every push.
+    #
+    # Separate from the Release coverage job on purpose: a log-assertion
+    # failure and a coverage/packaging problem should never be the same red X.
+    # It builds straight from source (no artifact dependency, so it starts in
+    # parallel) and excludes Category=IntegrationTest so it stays fast and
+    # network-free — the third-party suites have their own jobs.
+    name: Unit tests (Debug — log assertions)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build the solution (Debug)
+        shell: bash
+        # Build the whole solution, not just the test projects: AutoMoqer
+        # reflection-loads the platform shim (Readarr.Mono on Linux) by name
+        # rather than referencing it, so `dotnet test <Core.Test.csproj>`
+        # alone never builds it and every CoreTest<T> then dies in setup with
+        # "Could not load file or assembly 'Readarr.Mono'". OutputPath is a
+        # shared dir (no $(Configuration)/per-project split), so a full build
+        # lands Readarr.Mono.dll beside the test assembly where Assembly.Load
+        # finds it — which is what the published-artifact flow relies on too.
+        run: dotnet build src/Readarr.sln -c Debug
+
+      - name: Common.Test (Debug)
+        shell: bash
+        run: dotnet test src/NzbDrone.Common.Test/Readarr.Common.Test.csproj -c Debug --no-build --filter 'Category!=IntegrationTest'
+
+      - name: Core.Test (Debug)
+        # always(), so a Common.Test failure still yields the Core result
+        # rather than masking it.
+        if: always()
+        shell: bash
+        run: dotnet test src/NzbDrone.Core.Test/Readarr.Core.Test.csproj -c Debug --no-build --filter 'Category!=IntegrationTest'
+
+  lint-frontend:
+    name: Lint frontend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Install dependencies
+        shell: bash
+        run: yarn install --frozen-lockfile
+
+      - name: ESLint
+        shell: bash
+        run: yarn lint
+
+      - name: Stylelint
+        shell: bash
+        run: yarn stylelint-linux
+
+  test-frontend:
+    # The frontend had no automated coverage of any kind until this job
+    # existed -- no jest, no vitest, no test file anywhere under frontend/.
+    # Separate from lint-frontend so a failing assertion and a style
+    # violation are never reported as the same red X.
+    name: Unit tests (frontend)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Install dependencies
+        shell: bash
+        run: yarn install --frozen-lockfile
+
+      - name: Vitest
+        shell: bash
+        run: yarn test:frontend
+
+  e2e-smoke:
+    # Phase 8 exit criterion: one e2e smoke run per CI build. Boots the
+    # published linux-x64 backend artifact, asserts the API surface
+    # responds, and fires the ReidentifyLibrary command (fire-and-forget).
+    # Failures here are distinct from unit-test failures — they catch
+    # "the artifact CI built doesn't actually run" regressions that the
+    # unit suite can't see.
+    name: E2E smoke
+    needs: build-backend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download backend output
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-linux
+          path: .
+
+      - name: Restore exec bit on Readarr binary
+        # actions/upload-artifact strips POSIX exec bits on non-Windows.
+        shell: bash
+        run: chmod +x _output/net10.0/linux-x64/publish/Readarr
+
+      - name: Run smoke script
+        shell: bash
+        run: bash tests/e2e/smoke.sh
+
+  integration-tests:
+    # `Category=IntegrationTest` ran in no job at all — the unit job
+    # excludes it explicitly. In practice that meant HttpClientFixture's
+    # 54 tests had never executed in CI, which is how one of them sat
+    # three weeks past a hard-coded cookie expiry without anyone noticing.
+    #
+    # READARR_RUN_INTEGRATION is deliberately NOT set here. That leaves
+    # NzbDrone.Integration.Test's 94 tests ignored by their own gate and
+    # confines this job to the fixtures that do not touch OpenLibrary.
+    # The gate documents why: running those 94 in one pass got the source
+    # IP refused by openlibrary.org on 26 of 88 tests, and the refusals
+    # persisted for minutes. They run one fixture at a time in
+    # .github/workflows/nightly-integration.yml instead — hammering a free
+    # public service on every push is not a reasonable thing to do.
+    name: Integration tests (network)
+    needs: build-backend
+    runs-on: ubuntu-22.04
+    # Non-blocking on purpose. Every test here reaches a third-party host,
+    # so red can mean "their server is down" as readily as "we broke
+    # something", and a suite that reddens for reasons the committer
+    # cannot fix is one people learn to ignore. The win is that these run
+    # at all and their result is visible on every build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download backend output
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-linux
+          path: .
+
+      - name: Restore exec bits on published test artifacts
+        shell: bash
+        run: |
+          chmod +x test.sh
+          chmod +x _tests/net10.0/linux-x64/publish/Readarr.Test.Dummy 2>/dev/null || true
+
+      - name: Run integration-category tests
+        shell: bash
+        env:
+          TEST_DIR: _tests/net10.0/linux-x64/publish
+        run: ./test.sh Linux Integration Test
+
+      - name: Upload integration results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-integration
+          path: |
+            TestResult.xml
+            TestLog.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
+  playwright:
+    # The Playwright smoke suite ran in no CI job at all. It is gated
+    # behind READARR_RUN_PLAYWRIGHT=1 so a bare `dotnet test` skips it,
+    # and nothing ever set that — which is precisely the blind spot three
+    # of the .NET 10 migration misses survived in.
+    #
+    # Split by network dependence rather than by convenience. Ten of the
+    # sixteen tests drive a local instance only; those block the build.
+    # The other six seed a library through the API, which is a live
+    # OpenLibrary fetch, so they run as a step that is allowed to fail.
+    # A third party rate-limiting us is not a reason to redden main, and
+    # a suite that goes red for reasons the committer cannot fix is a
+    # suite people learn to ignore.
+    name: Playwright smoke
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Read the pinned Playwright version
+        id: pw
+        shell: bash
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/.*PackageVersion Include="Microsoft.Playwright" Version="\([^"]*\)".*/\1/p' \
+                src/Directory.Packages.props | head -1)
+          [ -n "$v" ] || { echo "could not read the Microsoft.Playwright pin" >&2; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the Chromium bundle
+        # Keyed on the pin: a version bump must download its own browser
+        # rather than silently reuse the previous one. That mismatch is
+        # exactly what produced "Executable doesn't exist" locally.
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Download backend output
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-linux
+          path: .
+
+      - name: Download UI output
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-ui
+          path: _output/UI
+
+      - name: Assemble the tree NzbDroneRunner expects
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=_tests/net10.0/linux-x64/bin
+          # In Release the runner launches <testdir>/../bin/Readarr and
+          # asserts a UI sits beside it. A full ./build.sh produces that
+          # via PackageFiles(); this pipeline runs --backend only, so
+          # assemble it from the two artifacts rather than pay for a
+          # second full build.
+          #
+          # cp -a preserves mtimes deliberately: the runner's staleness
+          # guard fails when _output/UI is NEWER than the copy beside the
+          # binary, and a plain cp would make every run look stale.
+          mkdir -p "$app"
+          cp -a _output/net10.0/linux-x64/publish/. "$app/"
+          cp -a _output/UI "$app/UI"
+          # upload-artifact strips POSIX exec bits on non-Windows.
+          chmod +x "$app/Readarr"
+
+      - name: Install Chromium
+        shell: bash
+        run: bash scripts/playwright-install.sh --with-deps
+
+      - name: Put the Playwright driver beside the published test assembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Microsoft.Playwright build targets drop .playwright into the
+          # framework build output, NOT into the per-RID publish folder that
+          # PublishAllRids produces and that this job runs from. _AssemblyGate
+          # looks for it next to its own assembly, so without this the whole
+          # suite fails in OneTimeSetUp with "Playwright driver not found" --
+          # which is exactly how this surfaced, the guard doing its job.
+          src=_tests/net10.0/.playwright
+          dst=_tests/net10.0/linux-x64/publish/.playwright
+          if [ ! -d "$src" ]; then
+            echo "No Playwright driver at $src." >&2
+            echo "The install step builds the test project, which is what drops it." >&2
+            exit 1
+          fi
+          rm -rf "$dst"
+          cp -a "$src" "$dst"
+          # The bundled node ships without an exec bit through this path.
+          find "$dst" -path '*/node/*' -name node -type f -exec chmod +x {} +
+
+      - name: Playwright — no network (blocking)
+        shell: bash
+        env:
+          READARR_RUN_PLAYWRIGHT: '1'
+        run: |
+          dotnet test _tests/net10.0/linux-x64/publish/Readarr.Playwright.Test.dll \
+            --filter 'Category!=RequiresOpenLibrary' \
+            --logger 'nunit;LogFilePath=PlaywrightResult.xml'
+
+      - name: Playwright — live OpenLibrary (non-blocking)
+        # always(), so a failure in the blocking step above still yields
+        # the full picture instead of one step's worth of it.
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          READARR_RUN_PLAYWRIGHT: '1'
+        run: |
+          dotnet test _tests/net10.0/linux-x64/publish/Readarr.Playwright.Test.dll \
+            --filter 'Category=RequiresOpenLibrary' \
+            --logger 'nunit;LogFilePath=PlaywrightOpenLibraryResult.xml'
+
+      - name: Upload Playwright results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          path: |
+            **/PlaywrightResult.xml
+            **/PlaywrightOpenLibraryResult.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  sbom:
+    # Phase 10: SBOM artifact. Captures the .NET + Node dependency trees
+    # at every successful build for supply-chain auditing. No publish
+    # action — the SBOM is an artifact attached to the run.
+    name: SBOM
+    needs:
+      - build-backend
+      - build-frontend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install dotnet-sbom-tool
+        shell: bash
+        run: dotnet tool install --global Microsoft.Sbom.DotNetTool
+
+      - name: Generate .NET SBOM
+        shell: bash
+        run: |
+          mkdir -p _sbom
+          dotnet sbom-tool generate \
+            -b src \
+            -bc src \
+            -m _sbom/dotnet \
+            -pn Librarr \
+            -pv "${MAJOR_VERSION}.${GITHUB_RUN_NUMBER}" \
+            -ps "Librarr Project" \
+            -nsb https://github.com/Rorqualx/Librarr || echo "sbom-tool returned non-zero; continuing"
+
+      - name: Install Node SBOM tool (syft)
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate Node SBOM
+        shell: bash
+        run: |
+          mkdir -p _sbom/node
+          syft dir:. \
+            --output spdx-json=_sbom/node/sbom-node.spdx.json \
+            --output cyclonedx-json=_sbom/node/sbom-node.cdx.json \
+            --exclude '_output/**' \
+            --exclude '_tests/**' \
+            --exclude 'src/**' \
+            --exclude '.git/**' || echo "syft returned non-zero; continuing"
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: _sbom/
+          retention-days: 90
+          if-no-files-found: warn

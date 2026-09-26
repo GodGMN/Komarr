@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/enforce-namespace.py",     "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/enforce-frontend-http.py", "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-fragile-files.py",   "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-platform-shims.py",  "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-rid-list.py",        "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-dual-sql.py",        "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git-destructive.py", "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/prefer-ast-grep.py",      "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/migration-pair-reminder.py", "timeout": 5 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/format-cs.sh",               "timeout": 30 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/format-js-ts.sh",            "timeout": 30 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/format-css.sh",              "timeout": 30 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/inject-conventions-hint.py", "timeout": 3 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/print-project-warnings.sh", "timeout": 3 }
+        ]
+      }
+    ]
+  }
+}

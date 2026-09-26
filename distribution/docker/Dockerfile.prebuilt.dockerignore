@@ -1,0 +1,46 @@
+# Build-context filter for Dockerfile.prebuilt ONLY.
+#
+# BuildKit looks for `<path-to-dockerfile>.dockerignore` next to the
+# Dockerfile and prefers it over the repo-root `.dockerignore`. We need a
+# separate one here because the root filter excludes `_output/` — which is
+# exactly what this variant packages. Without this file `COPY _output/…`
+# fails with "file not found in build context".
+#
+# Keep in sync with the root `.dockerignore` apart from the `_output/` line.
+
+# Test artefacts (the ~11 GB _tests/ tree the root filter is mostly about)
+_tests/
+_smoke-config/
+
+# _output/ is deliberately NOT excluded — it is the payload. That includes
+# _output/UI/, which build.sh keeps OUT of the per-RID publish/ trees.
+
+# Per-RID intermediate output left by `dotnet publish` runs
+**/bin/
+**/obj/
+
+# Sources — the prebuilt variant compiles nothing
+src/
+frontend/
+node_modules/
+
+# Git history not needed by the build
+.git/
+.github/
+
+# Coverage + test droppings
+CoverageResults/
+TestResult.xml
+TestLog.txt
+*.trx
+
+# IDE / editor noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local config / secrets if any operator drops them in tree
+*.env
+*.local
+docker-config/

@@ -1,0 +1,30 @@
+.rootFolder {
+  composes: card from '~Components/Card.css';
+
+  width: 290px;
+}
+
+.nameRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.name {
+  @add-mixin truncate;
+
+  margin-bottom: 20px;
+  font-weight: 300;
+  font-size: 24px;
+}
+
+.rescan {
+  flex: 0 0 auto;
+  margin-left: 8px;
+}
+
+.enabled {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}

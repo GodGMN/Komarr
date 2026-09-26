@@ -1,0 +1,161 @@
+# NzbDrone.Integration.Test — the 94 tests that boot a real instance and
+# call live OpenLibrary.
+#
+# These live here rather than in build.yml for one concrete reason, recorded
+# in the suite's own _AssemblyGate: running the whole ApiTests namespace in a
+# single pass got the source IP refused by openlibrary.org on 26 of 88 tests,
+# and the refusals continued for minutes afterwards. Every fixture starts with
+# empty appdata, so nothing is cached and each one re-fetches an author and its
+# works from scratch. Hence one fixture per invocation, with a pause between
+# them. OpenLibrary is a free public service and the fork depends on it; doing
+# this on every push would be both broken and rude.
+#
+# Nightly, not per-push, for the same reason. workflow_dispatch is kept so the
+# suite can be run on demand without waiting for the schedule.
+
+name: Nightly integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: 'Run a single fixture (substring match, e.g. AuthorFixture). Blank runs all.'
+        required: false
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  NODE_VERSION: '24.x'
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Integration suite (live OpenLibrary)
+    runs-on: ubuntu-22.04
+    # Generous: 24 fixtures, each booting a fresh instance and doing real
+    # metadata fetches, on top of a full build.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      # Backend first, then frontend. build.sh's Build() opens with
+      # `rm -rf _output`, so building the frontend first would delete it.
+      - name: Build backend
+        shell: bash
+        run: ./build.sh --backend
+
+      - name: Build frontend
+        shell: bash
+        env:
+          FORCE_COLOR: '0'
+        run: ./build.sh --frontend
+
+      - name: Assemble the tree NzbDroneRunner expects
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=_tests/net10.0/linux-x64/bin
+          # In Release the runner launches <testdir>/../bin/Readarr and
+          # asserts a UI sits beside it, which only a full ./build.sh
+          # normally produces (via PackageFiles). Assemble it explicitly so
+          # the failure mode is a missing file here rather than the suite
+          # silently booting a stale binary.
+          mkdir -p "$app"
+          cp -a _output/net10.0/linux-x64/publish/. "$app/"
+          cp -a _output/UI "$app/UI"
+          chmod +x "$app/Readarr"
+          chmod +x _tests/net10.0/linux-x64/publish/Readarr.Test.Dummy 2>/dev/null || true
+
+      - name: Run the suite one fixture at a time
+        shell: bash
+        env:
+          READARR_RUN_INTEGRATION: '1'
+          TEST_DIR: _tests/net10.0/linux-x64/publish
+        run: |
+          set -uo pipefail
+          dll="$TEST_DIR/Readarr.Integration.Test.dll"
+          [ -f "$dll" ] || { echo "::error::$dll not found — did the build publish it?"; exit 1; }
+
+          # Derived from source rather than hard-coded: a checked-in list
+          # silently stops covering fixtures added after it was written,
+          # which is the same rot this workflow exists to stop.
+          requested='${{ github.event.inputs.fixture }}'
+          mapfile -t fixtures < <(
+            grep -rho 'public class [A-Za-z0-9_]*Fixture' src/NzbDrone.Integration.Test \
+              | awk '{print $3}' | sort -u
+          )
+          if [ -n "$requested" ]; then
+            fixtures=("$requested")
+          fi
+
+          [ "${#fixtures[@]}" -gt 0 ] || { echo "::error::no fixtures discovered"; exit 1; }
+          echo "Discovered ${#fixtures[@]} fixtures"
+
+          mkdir -p integration-results
+          failed=(); inconclusive=(); passed=()
+
+          for f in "${fixtures[@]}"; do
+            echo "::group::$f"
+            if dotnet test "$dll" \
+                 --filter "FullyQualifiedName~$f" \
+                 --logger "nunit;LogFilePath=$PWD/integration-results/$f.xml" \
+                 > "integration-results/$f.log" 2>&1; then
+              # vstest exits 0 when every test was skipped or inconclusive
+              # too, so distinguish on the summary line rather than trust
+              # the exit code alone -- "green because nothing ran" is the
+              # failure this whole workflow exists to expose.
+              if grep -q "Passed:[[:space:]]*[1-9]" "integration-results/$f.log"; then
+                passed+=("$f")
+                echo "PASS $f"
+              else
+                inconclusive+=("$f")
+                echo "NONE $f — ran no tests (skipped/ignored/inconclusive)"
+              fi
+            else
+              failed+=("$f")
+              echo "FAIL $f"
+              tail -30 "integration-results/$f.log"
+            fi
+            echo "::endgroup::"
+            # Be a good citizen: let OpenLibrary breathe between fixtures.
+            sleep 10
+          done
+
+          {
+            echo "## Integration suite"
+            echo
+            echo "| Result | Count | Fixtures |"
+            echo "|---|---|---|"
+            echo "| Passed | ${#passed[@]} | ${passed[*]:-—} |"
+            echo "| No tests run | ${#inconclusive[@]} | ${inconclusive[*]:-—} |"
+            echo "| Failed | ${#failed[@]} | ${failed[*]:-—} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::${#failed[@]} fixture(s) failed: ${failed[*]}"
+            exit 1
+          fi
+
+      - name: Upload integration results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-integration-results
+          path: integration-results/
+          retention-days: 14
+          if-no-files-found: ignore

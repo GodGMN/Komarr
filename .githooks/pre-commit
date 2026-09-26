@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# Readarr fork pre-commit hook — mirrors the Claude Code hooks for human
+# commits. NOT auto-installed; opt in once per checkout with:
+#   git config core.hooksPath .githooks
+#
+# Portable to macOS's bundled bash 3.2 — no `mapfile`, no associative arrays.
+#
+# Fail-stop: any violation aborts the commit with a useful message.
+# Bypass envs (use sparingly):
+#   ACK_FRAGILE=1               allow staged edits to Parser.cs / Stylecop.ruleset
+#                               / Directory.Build.props / BookInfoProxy.cs
+#   SKIP_FORMAT_CHECK=1         skip the `dotnet format --verify-no-changes` step
+#   SKIP_LINT=1                 skip the yarn lint / stylelint step
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# NUL-delimited list of staged files (added / copied / modified / renamed).
+# bash 3.2 has no `mapfile`; use a portable while-read loop.
+STAGED_FILES=""
+while IFS= read -r -d '' f; do
+    [ -z "$f" ] && continue
+    # Append NUL-delimited so paths with spaces survive.
+    STAGED_FILES="${STAGED_FILES}${f}"$'\n'
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+FAIL=0
+err() { echo "  [pre-commit] $1" >&2; FAIL=1; }
+
+# Categorise staged files into newline-separated bucket strings.
+CS_FILES=""
+FRONTEND_FILES=""
+CSS_FILES=""
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+        *.cs)
+            CS_FILES="${CS_FILES}${f}"$'\n' ;;
+        frontend/*.js|frontend/*.jsx|frontend/*.ts|frontend/*.tsx)
+            FRONTEND_FILES="${FRONTEND_FILES}${f}"$'\n' ;;
+        frontend/*.css)
+            CSS_FILES="${CSS_FILES}${f}"$'\n' ;;
+    esac
+done <<< "$STAGED_FILES"
+
+# Helper: iterate over a newline-separated bucket.
+iter() { printf '%s' "$1"; }
+
+# --- 1. Namespace remap ---------------------------------------------------
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if git diff --cached -U0 -- "$f" \
+        | grep -E '^\+[^+]*\b(using(\s+static)?\s+|namespace\s+)Readarr\.' \
+        | grep -Ev 'Readarr\.(Api\.V[13]|Http)\b' >/dev/null; then
+        err "Namespace violation in $f — use NzbDrone.* (see Directory.Build.props:97-99)."
+    fi
+done <<< "$(iter "$CS_FILES")"
+
+# --- 2. Platform shim leak in Core/ ---------------------------------------
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+        src/NzbDrone.Core/*)
+            if git diff --cached -U0 -- "$f" \
+                | grep -E '^\+[^+]*\busing\s+NzbDrone\.(Windows|Mono)\b' >/dev/null; then
+                err "Platform shim leak in $f — Core/ must stay platform-neutral."
+            fi
+            ;;
+    esac
+done <<< "$(iter "$CS_FILES")"
+
+# --- 3. Raw SQL without WhereBuilder/SqlBuilder ---------------------------
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+        src/NzbDrone.Core/Datastore/Migration/*) continue ;;  # FluentMigrator owns dialect
+    esac
+    NEW_SQL=$(git diff --cached -U0 -- "$f" \
+        | grep -E '^\+[^+]*(\.Query(Async)?(<[^>]+>)?\s*\(\s*[$@]?"|\.Execute(Async)?\s*\(\s*[$@]?"|"[^"]*\bSELECT\b[^"]*\bFROM\b)' || true)
+    if [ -n "$NEW_SQL" ]; then
+        if ! grep -E 'WhereBuilderSqlite|WhereBuilderPostgres|SqlBuilder|IDatabase|BasicRepository' "$f" >/dev/null 2>&1; then
+            err "Raw SQL in $f without WhereBuilder/SqlBuilder context — will break on Postgres."
+        fi
+    fi
+done <<< "$(iter "$CS_FILES")"
+
+# --- 4. Frontend HTTP single-stack ----------------------------------------
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+        frontend/build/*|frontend/src/Utilities/createAjaxRequest.js|*__mocks__*) continue ;;
+    esac
+    if git diff --cached -U0 -- "$f" \
+        | grep -E "^\+[^+]*(\bfetch\s*\(|\bfrom\s+['\"]axios['\"]|\bnew\s+XMLHttpRequest\b|\bwindow\.fetch\b)" >/dev/null; then
+        err "Frontend HTTP violation in $f — use createAjaxRequest."
+    fi
+done <<< "$(iter "$FRONTEND_FILES")"
+
+# --- 5. win-arm64 in Directory.Build.props --------------------------------
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [ "$f" = "src/Directory.Build.props" ]; then
+        if git diff --cached -U0 -- "$f" | grep -E '^\+[^+]*\bwin-arm64\b' >/dev/null; then
+            err "win-arm64 is intentionally excluded from the RID list."
+        fi
+    fi
+done <<< "$(iter "$STAGED_FILES")"
+
+# --- 6. Fragile-file edits without ack ------------------------------------
+FRAGILE="
+src/NzbDrone.Core/Parser/Parser.cs
+src/Stylecop.ruleset
+src/Directory.Build.props
+src/NzbDrone.Core/MetadataSource/BookInfo/BookInfoProxy.cs
+"
+if [ "${ACK_FRAGILE:-0}" != "1" ]; then
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        while IFS= read -r frag; do
+            [ -z "$frag" ] && continue
+            if [ "$f" = "$frag" ]; then
+                err "Fragile file staged: $f — re-commit with ACK_FRAGILE=1 (and a real reason)."
+            fi
+        done <<< "$(iter "$FRAGILE")"
+    done <<< "$(iter "$STAGED_FILES")"
+fi
+
+# --- 7. dotnet format whitespace --verify-no-changes ----------------------
+# Group staged C# files by csproj for one dotnet-format call per project.
+if [ "${SKIP_FORMAT_CHECK:-0}" != "1" ] && [ -n "$CS_FILES" ] && command -v dotnet >/dev/null 2>&1; then
+    SEEN_PROJECTS=""
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        d="$(dirname "$f")"
+        while [ "$d" != "." ] && [ "$d" != "/" ]; do
+            csproj="$(ls "$d"/*.csproj 2>/dev/null | head -n1 || true)"
+            [ -n "$csproj" ] && break
+            d="$(dirname "$d")"
+        done
+        [ -z "${csproj:-}" ] && continue
+
+        # Skip if already verified this project.
+        case "$SEEN_PROJECTS" in
+            *":$csproj:"*) continue ;;
+        esac
+        SEEN_PROJECTS="${SEEN_PROJECTS}:${csproj}:"
+
+        # Collect every staged .cs file under this csproj.
+        proj_dir="$(dirname "$csproj")"
+        INCLUDES=""
+        while IFS= read -r g; do
+            [ -z "$g" ] && continue
+            case "$g" in
+                "$proj_dir"/*) INCLUDES="$INCLUDES $g" ;;
+            esac
+        done <<< "$(iter "$CS_FILES")"
+
+        if [ -n "$INCLUDES" ]; then
+            if ! dotnet format whitespace "$csproj" \
+                    --include $INCLUDES \
+                    --verify-no-changes --verbosity quiet >/dev/null 2>&1; then
+                err "dotnet format check failed for $csproj. Run: dotnet format whitespace \"$csproj\" --include$INCLUDES"
+            fi
+        fi
+    done <<< "$(iter "$CS_FILES")"
+fi
+
+# --- 8. Frontend lint -----------------------------------------------------
+if [ "${SKIP_LINT:-0}" != "1" ] && [ -n "$FRONTEND_FILES" ]; then
+    ESLINT="frontend/node_modules/.bin/eslint"
+    if [ -x "$ESLINT" ]; then
+        FILES_ARG=""
+        while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            FILES_ARG="$FILES_ARG $f"
+        done <<< "$(iter "$FRONTEND_FILES")"
+        if ! "$ESLINT" \
+            --config frontend/.eslintrc.js \
+            --ignore-path frontend/.eslintignore \
+            --no-error-on-unmatched-pattern \
+            $FILES_ARG >&2; then
+            err "ESLint failed on staged frontend files. Run 'yarn lint-fix' and re-stage."
+        fi
+    else
+        echo "  [pre-commit] eslint missing — run 'yarn install' from repo root." >&2
+    fi
+fi
+if [ "${SKIP_LINT:-0}" != "1" ] && [ -n "$CSS_FILES" ]; then
+    STYLELINT="frontend/node_modules/.bin/stylelint"
+    if [ -x "$STYLELINT" ]; then
+        FILES_ARG=""
+        while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            FILES_ARG="$FILES_ARG $f"
+        done <<< "$(iter "$CSS_FILES")"
+        if ! "$STYLELINT" \
+            --config frontend/.stylelintrc \
+            $FILES_ARG >&2; then
+            err "Stylelint failed on staged CSS files."
+        fi
+    fi
+fi
+
+if [ $FAIL -ne 0 ]; then
+    echo "" >&2
+    echo "  [pre-commit] commit aborted; see violations above." >&2
+    echo "  Bypass at your own risk: ACK_FRAGILE=1, SKIP_FORMAT_CHECK=1, SKIP_LINT=1" >&2
+    exit 1
+fi
+exit 0

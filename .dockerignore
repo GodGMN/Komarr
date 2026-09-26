@@ -1,0 +1,36 @@
+# Phase 9b Docker build context filter. Without this, `docker build`
+# uploads ~11 GB to the daemon (most of it the _tests/ tree from a
+# prior local `dotnet test` run, which the Dockerfile doesn't use
+# anyway — it publishes from source inside the image).
+
+# Build outputs / test artefacts (rebuilt inside the image)
+_output/
+_tests/
+_smoke-config/
+
+# Per-RID intermediate output left by `dotnet publish` runs
+**/bin/
+**/obj/
+
+# Node modules (stage 2 reinstalls inside the node:24-alpine layer)
+node_modules/
+
+# Git history not needed by the build
+.git/
+.github/
+
+# Coverage + test droppings
+CoverageResults/
+TestResult.xml
+TestLog.txt
+*.trx
+
+# IDE / editor noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local config / secrets if any operator drops them in tree
+*.env
+*.local

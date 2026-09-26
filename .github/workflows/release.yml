@@ -1,0 +1,622 @@
+# Librarr release pipeline — Phase 9 closeout.
+#
+# Fires on `v*` tag push (or manual workflow_dispatch). Produces:
+#   * Per-RID tarballs / zips for all 12 platforms the project targets
+#     (mirrors azure-pipelines.yml:266-373).
+#   * SHA256SUMS file aggregating the archive checksums.
+#   * Windows installers (win-x64 / win-x86) built with Inno Setup from
+#     distribution/windows/setup/readarr.iss.
+#   * Authenticode signatures on the Windows binaries and installers,
+#     when the WINDOWS_CERT_PFX + WINDOWS_CERT_PASSWORD secrets are set.
+#     Without them everything still builds, just unsigned.
+#   * A draft GitHub release with the tarballs + zips + installers +
+#     SHA256SUMS attached. Draft so the user reviews notes before publish.
+#   * Multi-arch Docker manifest (linux/amd64, linux/arm64, linux/arm/v7)
+#     built from distribution/docker/Dockerfile, pushed to:
+#       - ghcr.io/<owner>/librarr            (workflow GITHUB_TOKEN)
+#       - docker.io/<DOCKERHUB_USERNAME>/librarr  (DOCKERHUB_TOKEN secret)
+#     Image tags via docker/metadata-action: :<version>, :beta on beta
+#     tags, :latest only on non-prerelease tags.
+#
+# Explicitly out of scope (TODO with required secrets noted inline):
+#   * macOS .app notarization via notarytool
+#   * Sentry source-map upload (azure-pipelines.yml:377-393)
+#
+# Stay-local: this file lives dormant until `git push --tags` happens.
+# `gh release create --draft` and `docker build-push-action push:false`
+# keep side-effects bounded even on accidental fires.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (without leading v — e.g. 1.0.0-beta.1)'
+        required: true
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  # See the note in build.yml — Node 20 is EOL, 24 is LTS until 2028-04-30.
+  NODE_VERSION: '24.x'
+
+permissions:
+  contents: write    # gh release create
+  packages: write    # future ghcr.io push
+
+jobs:
+  variables:
+    name: Compute release version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+    steps:
+      - id: compute
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Strip the leading "v" from refs/tags/vX.Y.Z
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Release version: ${VERSION}"
+
+  build-backend:
+    name: Build backend (all RIDs)
+    needs: variables
+    runs-on: ubuntu-22.04
+    env:
+      READARRVERSION: ${{ needs.variables.outputs.version }}
+      EnableAnalyzers: 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build + package backend
+        shell: bash
+        # --enable-extra-platforms (freebsd-x64 + linux-x86) is deferred
+        # for 1.0.0-beta — see build.yml for the rationale. The downstream
+        # `package` job's tarball loop already handles missing per-RID
+        # output paths with a WARN+skip, so the release artifact set
+        # simply omits the two extras.
+        run: ./build.sh --backend --packages
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-artifacts
+          path: _artifacts/
+          retention-days: 7
+          if-no-files-found: error
+
+  build-windows:
+    name: Build backend (Windows RIDs)
+    needs: variables
+    runs-on: windows-2022
+    env:
+      READARRVERSION: ${{ needs.variables.outputs.version }}
+      EnableAnalyzers: 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Why this job exists at all: the tray application
+      # (src/NzbDrone/Readarr.csproj) targets net10.0-windows and only
+      # publishes from a Windows runner. Without it, build.sh's
+      # PackageWindows finds no _output/net10.0-windows/<rid>/publish and
+      # deliberately skips the package rather than ship a Windows zip
+      # missing Readarr.Windows.dll — which is why releases up to
+      # 1.1.0-beta had no Windows asset.
+      #
+      # build.sh already knows how to do this: it detects a Windows host,
+      # switches the msbuild platform to Windows, and PackageWindows merges
+      # the net10.0-windows publish over the net10.0 console publish and
+      # strips the Mono shim. Reuse it rather than restating the packaging
+      # rules in YAML, where they would drift.
+      #
+      # One RID per invocation, deliberately. msbuild would happily take
+      # `RuntimeIdentifiers=win-x64;win-x86`, but under Git Bash — which is
+      # what `shell: bash` means on a Windows runner — MSYS re-marshals
+      # arguments containing a semicolon on the way to dotnet.exe, and
+      # msbuild fails with "MSB1006: Property is not valid. Switch:
+      # win-x86". Verified by running it.
+      #
+      # Doing a full --backend --packages twice is safe: Build() wipes
+      # _output and _tests, but never _artifacts, so the win-x64 package
+      # survives the win-x86 pass.
+      - name: Build + package win-x64
+        shell: bash
+        run: ./build.sh --backend --packages -f net10.0 -r win-x64
+
+      - name: Build + package win-x86
+        shell: bash
+        run: ./build.sh --backend --packages -f net10.0 -r win-x86
+
+      # Fail loudly here rather than silently shipping a broken zip. The
+      # whole point of this job is Readarr.Windows.dll; if it is absent the
+      # package is the exact artifact the old skip existed to prevent.
+      - name: Verify the Windows platform shim made it into the package
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rid in win-x64 win-x86; do
+            pkg="_artifacts/${rid}/net10.0/Readarr"
+            [ -d "$pkg" ] || { echo "ERROR: $pkg missing"; exit 1; }
+            [ -f "$pkg/Readarr.Windows.dll" ] || { echo "ERROR: $pkg/Readarr.Windows.dll missing"; exit 1; }
+            [ -f "$pkg/Readarr.exe" ] || { echo "ERROR: $pkg/Readarr.exe missing"; exit 1; }
+            [ -f "$pkg/Readarr.Console.exe" ] || { echo "ERROR: $pkg/Readarr.Console.exe missing"; exit 1; }
+            if [ -f "$pkg/Readarr.Mono.dll" ]; then
+              echo "ERROR: $pkg still contains the Mono shim"; exit 1
+            fi
+            echo "  ${rid} OK"
+          done
+
+      # Before the upload, so the signed binaries are what both the portable
+      # zips (built in `package`) and the installer (built in `installer`)
+      # end up containing. Signing later would mean signing them twice or
+      # shipping one of the two unsigned.
+      #
+      # No certificate configured => the script says so and exits 0, and the
+      # release ships unsigned. To turn signing on, add two repository
+      # secrets: WINDOWS_CERT_PFX (base64 of the .pfx) and
+      # WINDOWS_CERT_PASSWORD. Nothing else here changes.
+      - name: Authenticode-sign the Windows binaries
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: ./distribution/windows/sign.ps1 -Path _artifacts
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-artifacts
+          path: _artifacts/
+          retention-days: 7
+          if-no-files-found: error
+
+  build-frontend:
+    name: Build frontend
+    needs: variables
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Build frontend
+        shell: bash
+        env:
+          FORCE_COLOR: '0'
+        run: ./build.sh --frontend
+
+      - name: Upload UI output
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-artifacts
+          path: _output/UI/
+          retention-days: 7
+          if-no-files-found: error
+
+  installer:
+    name: Windows installer
+    # Downstream of build-windows deliberately: the installer packs whatever
+    # that job produced, signatures included. Building it there instead would
+    # mean waiting on the frontend before the Windows backend could start.
+    needs: [variables, build-windows, build-frontend]
+    runs-on: windows-2022
+    env:
+      READARRVERSION: ${{ needs.variables.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-artifacts
+          path: _artifacts/
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-artifacts
+          path: _output/UI/
+
+      # Same staging the `package` job does before tarballing, for the same
+      # reason: build.sh's PackageFiles() copies _output/UI into each per-RID
+      # package during a `--packages` build, and we split backend and frontend
+      # across separate jobs. The .iss pulls in
+      # _artifacts\<rid>\net10.0\Readarr\* recursively, so the UI has to be
+      # in place before ISCC runs or the installer ships a headless app.
+      - name: Stage UI into each per-RID package
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rid in win-x64 win-x86; do
+            dest="_artifacts/${rid}/net10.0/Readarr/UI"
+            mkdir -p "$dest"
+            cp -r _output/UI/* "$dest/"
+          done
+
+      # Inno Setup is preinstalled on windows-2022 (6.7.1 at time of
+      # writing), and build.sh uses it when present rather than downloading.
+      - name: Build installers
+        shell: bash
+        run: ./build.sh --installer
+
+      - name: Verify both installers were produced
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.variables.outputs.version }}"
+          for rid in win-x64 win-x86; do
+            exe="distribution/windows/setup/output/Librarr.${VERSION}.${rid}-installer.exe"
+            [ -f "$exe" ] || { echo "ERROR: $exe missing"; exit 1; }
+            echo "  $(basename "$exe") $(stat -c %s "$exe" 2>/dev/null || stat -f %z "$exe") bytes"
+          done
+
+      # The installer is the file most users actually download and the one
+      # SmartScreen judges, so it needs its own signature -- signing the
+      # payload does not sign the wrapper.
+      - name: Authenticode-sign the installers
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $exes = Get-ChildItem distribution/windows/setup/output/*.exe
+          ./distribution/windows/sign.ps1 -Path $exes.FullName
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-artifacts
+          path: distribution/windows/setup/output/*.exe
+          retention-days: 7
+          if-no-files-found: error
+
+  package:
+    name: Tarball + draft release
+    needs: [variables, build-backend, build-windows, build-frontend, installer]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Download backend artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-artifacts
+          path: _artifacts/
+
+      # Same _artifacts/ root, different RID subdirectories — the Linux job
+      # skips win-x64/win-x86, so these two merge in without colliding.
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-artifacts
+          path: _artifacts/
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-artifacts
+          path: _output/UI/
+
+      # Straight into _release/ — these are finished assets, not something
+      # the steps below repackage.
+      - name: Download Windows installers
+        uses: actions/download-artifact@v8
+        with:
+          name: installer-artifacts
+          path: _release/
+
+      - name: Stage UI into each per-RID package
+        # build.sh PackageFiles() copies _output/UI into each
+        # _artifacts/<rid>/<framework>/Readarr/ during a packages build.
+        # We split backend/frontend across separate jobs, so re-stage
+        # the UI before tarballing.
+        shell: bash
+        run: |
+          for rid_dir in _artifacts/*/net10.0/Readarr; do
+            [ -d "$rid_dir" ] || continue
+            mkdir -p "$rid_dir/UI"
+            cp -r _output/UI/* "$rid_dir/UI/"
+          done
+
+      - name: Assert the publish output is self-contained
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 1.2.0-beta shipped framework-dependent by accident. .NET 7 dropped
+          # the old rule that a RuntimeIdentifier implies SelfContained, so the
+          # .NET 10 migration quietly cut every artifact from ~97 MB to ~25 MB
+          # with no runtime inside. Nothing failed: the app builds, the tests
+          # pass, and the E2E smoke boots it happily on a runner that already
+          # has .NET installed. Only a user unpacking the tarball on a clean
+          # machine would have found out.
+          #
+          # So assert on the artifact itself rather than trusting the property.
+          # Native RIDs are checked for their host CLR; win-* carry the
+          # Windows-native equivalent, hostfxr.dll.
+          fail=0
+          checked=0
+          for rid_dir in _artifacts/*/net10.0/Readarr; do
+            [ -d "$rid_dir" ] || continue
+            checked=$((checked + 1))
+            rid=$(basename "$(dirname "$(dirname "$rid_dir")")")
+            case "$rid" in
+              win-*)  probe=hostfxr.dll ;;
+              osx-*)  probe=libcoreclr.dylib ;;
+              *)      probe=libcoreclr.so ;;
+            esac
+            if [ -e "$rid_dir/$probe" ]; then
+              echo "  ok    ${rid} (found ${probe})"
+            else
+              echo "::error::${rid} publish has no ${probe} - it is framework-dependent and will not run without a .NET install."
+              fail=1
+            fi
+          done
+
+          # A check that inspects nothing passes trivially, which is how the
+          # original bug would have slipped past a sloppier version of this
+          # step. The archive loops below cover 12 RIDs; anything under 10
+          # means artifacts went missing and the assertion is not doing its job.
+          echo "checked ${checked} publish directories"
+          if [ "$checked" -lt 10 ]; then
+            echo "::error::Only ${checked} publish directories found - expected at least 10. Refusing to vouch for artifacts that are not there."
+            exit 1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Refusing to package a release that users cannot run. See SelfContained in src/Directory.Build.props."
+            exit 1
+          fi
+
+      - name: Create per-RID archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.variables.outputs.version }}"
+          mkdir -p _release
+
+          # tar.gz targets — POSIX RIDs.
+          for rid in linux-x64 linux-musl-x64 linux-arm linux-musl-arm \
+                     linux-arm64 linux-musl-arm64 linux-x86 \
+                     osx-x64 osx-arm64 freebsd-x64; do
+            src="_artifacts/${rid}/net10.0/Readarr"
+            if [ -d "$src" ]; then
+              tar -C "_artifacts/${rid}/net10.0" -czf "_release/Librarr.${VERSION}.${rid}.tar.gz" Readarr
+              echo "  packaged ${rid}"
+            else
+              echo "  WARN: missing ${src}, skipping ${rid}"
+            fi
+          done
+
+          # zip targets — Windows.
+          for rid in win-x64 win-x86; do
+            src="_artifacts/${rid}/net10.0/Readarr"
+            if [ -d "$src" ]; then
+              (cd "_artifacts/${rid}/net10.0" && zip -qr "$GITHUB_WORKSPACE/_release/Librarr.${VERSION}.${rid}.zip" Readarr)
+              echo "  packaged ${rid}"
+            else
+              echo "  WARN: missing ${src}, skipping ${rid}"
+            fi
+          done
+
+          # macOS .app bundle variants (zip — preserves the bundle dir).
+          for rid in osx-x64-app osx-arm64-app; do
+            src="_artifacts/${rid}/net10.0"
+            if [ -d "$src" ]; then
+              (cd "$src" && zip -qr "$GITHUB_WORKSPACE/_release/Librarr.${VERSION}.${rid}.zip" Readarr.app)
+              echo "  packaged ${rid}"
+            fi
+          done
+
+      - name: Compute SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd _release
+          # nullglob so *.exe vanishes rather than being passed through
+          # literally when signing/installer output is absent. There is
+          # always at least one tar.gz, so sha256sum never falls back to
+          # reading stdin and hanging.
+          shopt -s nullglob
+          sha256sum *.tar.gz *.zip *.exe > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create draft GitHub release
+        # TODO Phase 9b:
+        #   * Notarize the .app bundles via `notarytool`
+        #     (needs APPLE_ID + APPLE_PASSWORD + APPLE_TEAM_ID secrets).
+        #   * Sentry source-map upload (needs SENTRY_AUTH_TOKEN).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Whether the signing secret is configured, so the notes can say
+          # what actually happened instead of claiming signatures that may
+          # not exist. The value is a boolean, never the secret itself.
+          WINDOWS_SIGNED: ${{ secrets.WINDOWS_CERT_PFX != '' }}
+        shell: bash
+        run: |
+          VERSION="${{ needs.variables.outputs.version }}"
+
+          # `gh release create` always creates a NEW release, and a draft
+          # carries no git tag, so there is nothing for GitHub to collide
+          # with -- re-running this workflow for a tag silently orphans the
+          # previous draft instead of replacing it. v1.0.0-beta collected two
+          # that way while this workflow was being debugged, one of them
+          # created 22 minutes after the release had already been published.
+          # Each orphan holds a full set of ~880 MB of artifacts that nobody
+          # can download, because drafts are invisible without push access.
+          #
+          # Filtering happens in awk rather than in the --jq filter so the
+          # tag comparison is an exact string match on a known-set variable,
+          # with no interpolation into a jq program and no dependency on how
+          # gh's jq resolves env lookups. One request, both answers.
+          RELEASES=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+            --jq '.[] | [(.draft|tostring), .tag_name, (.id|tostring)] | @tsv')
+
+          # A published release is deliberately never touched -- it is the
+          # thing users already hold checksums for. Stop instead, because
+          # re-running the release job for a tag that has already shipped is
+          # a mistake, and quietly producing a draft nobody can see is the
+          # worst available way to report it.
+          if printf '%s\n' "$RELEASES" \
+             | awk -F'\t' -v tag="v${VERSION}" '$1=="false" && $2==tag {found=1} END {exit !found}'; then
+            echo "::error::v${VERSION} is already published. Delete that release first if you really mean to rebuild it."
+            exit 1
+          fi
+
+          printf '%s\n' "$RELEASES" \
+            | awk -F'\t' -v tag="v${VERSION}" '$1=="true" && $2==tag {print $3}' \
+            | while read -r stale_id; do
+                echo "Removing stale draft release ${stale_id} for v${VERSION}"
+                gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${stale_id}"
+              done
+
+          # Mark anything that isn't a plain x.y.z as a prerelease, or GitHub
+          # serves a beta as "Latest" and every tool that reads
+          # /releases/latest picks it up as stable.
+          PRERELEASE=""
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            PRERELEASE="--prerelease"
+          fi
+
+          # Windows assets are produced by the build-windows and installer
+          # jobs on windows-2022 runners. Releases up to 1.1.0-beta had none
+          # and said so here; that note is gone because the gap is closed.
+          # Built with printf rather than a multi-line string literal: every
+          # line inside a `run: |` block must stay indented, and a bare line
+          # at column 0 silently ends the YAML block scalar.
+          if [ "${WINDOWS_SIGNED}" = "true" ]; then
+            SIGNING_NOTE='The Windows binaries and installers are Authenticode-signed.'
+          else
+            SIGNING_NOTE='The Windows binaries are not code-signed, so SmartScreen will warn on first run — choose "More info" then "Run anyway", or verify the checksum above instead.'
+          fi
+
+          printf '%s\n' \
+            'Verify downloads against `SHA256SUMS` before installing. Upgrading from Readarr: see `docs/migrating-from-readarr.md`.' \
+            '' \
+            'Windows users have two options: `Librarr.<version>.win-x64-installer.exe` installs to `%ProgramData%\Librarr` and can register the Windows service for you, or the `win-x64` / `win-x86` zips are a portable build — unzip and run `Readarr.exe` (tray) or `Readarr.Console.exe`.' \
+            '' \
+            "${SIGNING_NOTE}" \
+            > _release_notes.md
+
+          # nullglob keeps an absent installer from being passed to gh as the
+          # literal string `_release/*.exe`, which it would treat as a missing
+          # file and fail on.
+          shopt -s nullglob
+          ASSETS=(_release/*.tar.gz _release/*.zip _release/*.exe _release/SHA256SUMS)
+
+          gh release create "v${VERSION}" \
+            --title "Librarr ${VERSION}" \
+            --notes-file _release_notes.md \
+            --draft $PRERELEASE \
+            "${ASSETS[@]}"
+
+  docker-multiarch:
+    name: Docker multi-arch
+    needs: [variables, build-backend, build-frontend]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        # Zero-config — uses the workflow's built-in GITHUB_TOKEN. The
+        # release.yml `permissions:` block declares `packages: write`.
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        # Unconditional — assumes DOCKERHUB_USERNAME + DOCKERHUB_TOKEN
+        # are set as repo secrets. If they ever go missing the step
+        # fails loudly (matching the GHCR step's "fail-fast" behavior).
+        # Earlier attempt at `if: secrets.X != ''` gating broke workflow
+        # validation, so we drop the conditional entirely now that
+        # secrets are provisioned.
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute image tags
+        # Generates :<version> exact + :beta rolling pointer (only on
+        # beta tags) + :latest (only on non-prerelease tags).
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/librarr
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/librarr
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, 'alpha') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'rc') }}
+            type=raw,value=beta,enable=${{ contains(github.ref_name, 'beta') }}
+          labels: |
+            org.opencontainers.image.title=Librarr
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build + push image (amd64 + arm64 + armv7)
+        # The Dockerfile maps TARGETARCH → musl RID itself and pins both
+        # build stages to $BUILDPLATFORM, so all three arches cross-compile
+        # on the amd64 runner. Do NOT pass DOTNET_RID here — a single
+        # build-arg applies to every platform and would pin all three
+        # manifest entries to the same RID.
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: distribution/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            LIBRARR_VERSION=${{ needs.variables.outputs.version }}
+            BUILD_BRANCH=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

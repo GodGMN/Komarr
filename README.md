@@ -2,7 +2,7 @@
 
 Komarr is a planned self-hosted manga acquisition and collection manager, inspired by Sonarr and built for the *arr ecosystem. It will organize manga on the filesystem for readers such as Komga and Kavita to consume.
 
-The project is at the planning stage. The [product requirements](docs/PRD.md) describe the proposed v0.1 scope and the intended Librarr 1.2.2-beta starting point. No application code has been imported yet.
+The project is at an early implementation stage. The [product requirements](docs/PRD.md) describe the proposed v0.1 scope. The Librarr 1.2.2-beta source is now imported at a pinned commit; most runtime names and book behavior still come from Librarr. See [upstream provenance](UPSTREAM.md) before building or modifying the inherited code.
 
 ## Principles
 

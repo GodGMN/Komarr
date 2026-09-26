@@ -1,0 +1,22 @@
+.folder {
+  width: 25%;
+  word-break: break-all;
+}
+
+.term {
+  width: 30%;
+}
+
+.author {
+  width: 45%;
+}
+
+.searchButton {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.noMatches {
+  color: var(--helpTextColor);
+}

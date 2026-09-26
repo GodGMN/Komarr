@@ -1,0 +1,40 @@
+.banner {
+  composes: alert from '~Components/Alert.css';
+
+  display: flex;
+  align-items: center;
+  margin: 0 16px 16px;
+  padding: 10px 16px;
+  gap: 12px;
+}
+
+.icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.body {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.title {
+  margin-right: 4px;
+  font-weight: 600;
+}
+
+.spinner {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

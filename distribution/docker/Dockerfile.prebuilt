@@ -1,0 +1,118 @@
+# Librarr Docker image — "prebuilt" variant (Phase 9).
+#
+# Build context: repo root.
+#   docker build -f distribution/docker/Dockerfile.prebuilt -t librarr/librarr:1.0.0-beta.1 .
+#
+# This Dockerfile assumes the backend + frontend have ALREADY been built
+# locally via ./build.sh (it copies _output/). For a self-contained
+# multi-stage build that compiles inside the image — recommended for
+# anyone without a local .NET 10 + Node 24 toolchain — use
+# `distribution/docker/Dockerfile` (the default, Phase 9b).
+#
+# The published image expects:
+#   /config         persistent app data (config.xml, Readarr.db, Logs/)
+#   /books          your library root
+#   /downloads      where the download clients drop completed files
+#
+# Versioning: unlike distribution/docker/Dockerfile, this variant compiles
+# nothing and so cannot stamp a version — it inherits whatever build.sh
+# baked into _output. A plain `./build.sh --backend` leaves the 10.0.0.*
+# placeholder, and because RuntimeInfo.InternalIsOfficialBuild() rejects
+# Major >= 10 the resulting image runs with IsProduction == false. Export
+# READARRVERSION before building if that matters:
+#
+#   READARRVERSION=1.0.0-beta.4 ./build.sh --backend --frontend
+#
+# Multi-arch: this variant can only produce the arches you actually built
+# locally. `./build.sh --backend --enable-extra-platforms` emits every RID
+# under _output/net10.0/, in which case:
+#
+#   docker buildx build -f distribution/docker/Dockerfile.prebuilt \
+#     --platform linux/amd64,linux/arm64,linux/arm/v7 -t librarr/librarr:dev .
+#
+# works as-is — the payload stage below picks the matching musl RID per
+# target. A missing RID directory fails that platform's build loudly.
+
+# ────────────────────────────────────────────────────────────────────
+# Payload stage — select the per-arch publish output.
+# ────────────────────────────────────────────────────────────────────
+# COPY cannot branch on TARGETARCH, so stage the whole _output tree and
+# pick with a shell case. Pinned to $BUILDPLATFORM: it is a plain cp, no
+# reason to run it under emulation.
+FROM --platform=$BUILDPLATFORM alpine:3.20 AS payload
+
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG DOTNET_RID=""
+
+COPY _output/net10.0/ /out/
+# build.sh stages the webpack bundle at _output/UI and deliberately keeps it
+# out of the per-RID publish/ trees (it grafts it in at package time — see the
+# "Stage UI into each per-RID package" step in .github/workflows/release.yml).
+# Without this the image serves an API with no web UI.
+COPY _output/UI/ /ui/
+
+RUN set -eu; \
+    if [ -n "${DOTNET_RID:-}" ]; then \
+        rid="${DOTNET_RID}"; \
+    else \
+        case "${TARGETARCH:-}${TARGETVARIANT:-}" in \
+            amd64|"")        rid="linux-musl-x64" ;; \
+            arm64|arm64v8)   rid="linux-musl-arm64" ;; \
+            arm|armv7|armv6) rid="linux-musl-arm" ;; \
+            *)               echo "unsupported TARGETARCH '${TARGETARCH:-}${TARGETVARIANT:-}' — add it to the case in distribution/docker/Dockerfile.prebuilt" >&2; exit 1 ;; \
+        esac; \
+    fi; \
+    if [ ! -d "/out/${rid}/publish" ]; then \
+        echo "missing _output/net10.0/${rid}/publish — build that RID first (./build.sh --backend --enable-extra-platforms)" >&2; \
+        exit 1; \
+    fi; \
+    echo "packaging RID: ${rid}"; \
+    mkdir -p /app/UI; \
+    cp -a "/out/${rid}/publish/." /app/; \
+    cp -a /ui/. /app/UI/
+
+# ────────────────────────────────────────────────────────────────────
+# Runtime image
+# ────────────────────────────────────────────────────────────────────
+# Keep this in lockstep with the runtime stage in distribution/docker/Dockerfile.
+# The .NET 10 migration updated that one and missed this file entirely, so the
+# image kept building and then died at startup with "You must install or update
+# .NET to run this application" -- a runtime failure, invisible to a docker
+# build, in a file nothing in CI exercises.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
+
+LABEL org.opencontainers.image.title="Librarr" \
+      org.opencontainers.image.description="Librarr — OpenLibrary continuation of the archived Readarr ebook manager" \
+      org.opencontainers.image.source="https://github.com/Rorqualx/Librarr" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
+
+# Install the same packages Readarr's hotio image carries: SQLite (for the
+# main DB), sqlite-libs, libintl (NLog), ca-certificates (HTTPS).
+RUN apk add --no-cache \
+        sqlite-libs \
+        icu-libs \
+        ca-certificates \
+        bash \
+        curl \
+    && rm -rf /var/cache/apk/*
+
+ENV LIBRARR_HOME=/app \
+    LIBRARR_DATA=/config \
+    LIBRARR_PORT=8787 \
+    LIBRARR_SSL_PORT=6868 \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+WORKDIR ${LIBRARR_HOME}
+
+COPY --from=payload /app/ ${LIBRARR_HOME}/
+
+VOLUME ["/config", "/books", "/downloads"]
+EXPOSE 8787 6868
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -fsS http://localhost:${LIBRARR_PORT}/ping || exit 1
+
+ENTRYPOINT ["./Readarr"]
+CMD ["-nobrowser", "-data=/config"]

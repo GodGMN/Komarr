@@ -122,6 +122,8 @@ namespace NzbDrone.Core.Test.Manga
                 files.Object,
                 _identifier,
                 new Mock<IMangaImportService>().Object,
+                new Mock<IMangaHistoryService>().Object,
+                new Mock<IMangaBlocklistService>().Object,
                 clients.Object,
                 _disk.Object,
                 LogManager.GetCurrentClassLogger());
@@ -159,6 +161,41 @@ namespace NzbDrone.Core.Test.Manga
 
             tracked.Verify(value => value.TrackDownload(It.IsAny<DownloadClientDefinition>(), It.IsAny<DownloadClientItem>()), Times.Never());
             client.Verify(value => value.RemoveItem(It.IsAny<DownloadClientItem>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void Failed_client_download_is_visible_and_blocklisted_without_importing_items()
+        {
+            var downloads = new Mock<IMangaDownloadRepository>();
+            downloads.Setup(value => value.GetSent()).Returns(new[] { _download });
+            var files = new Mock<IMangaDownloadFileRepository>();
+            var client = new Mock<IDownloadClient>();
+            client.Setup(value => value.GetItems()).Returns(new[]
+            {
+                new DownloadClientItem { DownloadId = "torrent-hash", Status = DownloadItemStatus.Failed }
+            });
+            var clients = new Mock<IProvideDownloadClient>();
+            clients.Setup(value => value.Get(2)).Returns(client.Object);
+            var history = new Mock<IMangaHistoryService>();
+            var blocklist = new Mock<IMangaBlocklistService>();
+            var monitor = new MangaDownloadMonitor(
+                downloads.Object,
+                files.Object,
+                _identifier,
+                new Mock<IMangaImportService>().Object,
+                history.Object,
+                blocklist.Object,
+                clients.Object,
+                _disk.Object,
+                LogManager.GetCurrentClassLogger());
+
+            monitor.Handle(new TrackedDownloadRefreshedEvent(new List<TrackedDownload>()));
+
+            _download.Status.Should().Be(MangaDownloadStatus.Failed);
+            downloads.Verify(value => value.Update(_download), Times.Once());
+            blocklist.Verify(value => value.Block(_download, It.IsAny<string>()), Times.Once());
+            history.Verify(value => value.Record(_download, MangaHistoryEventType.DownloadFailed, It.IsAny<string>(), null), Times.Once());
+            files.Verify(value => value.Insert(It.IsAny<MangaDownloadFile>()), Times.Never());
         }
     }
 }

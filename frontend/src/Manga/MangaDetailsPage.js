@@ -17,7 +17,7 @@ class MangaDetailsPage extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { manga: null, items: [], files: [], downloads: [], downloadRevision: 0,
+    this.state = { manga: null, items: [], files: [], downloads: [], history: [], blocklist: [], downloadRevision: 0,
       isLoading: true, isRefreshing: false, error: null };
   }
 
@@ -29,6 +29,10 @@ class MangaDetailsPage extends Component {
     this.requests?.forEach((request) => request.abortRequest());
     this.refreshRequest?.abortRequest();
     this.downloadRequest?.abortRequest();
+    this.fileRequest?.abortRequest();
+    this.historyRequest?.abortRequest();
+    this.blocklistRequest?.abortRequest();
+    this.unblockRequest?.abortRequest();
   }
 
   load = () => {
@@ -37,11 +41,14 @@ class MangaDetailsPage extends Component {
       createAjaxRequest({ url: `/manga/${id}`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/items`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/files`, method: 'GET', dataType: 'json' }),
-      createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' })
+      createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' }),
+      createAjaxRequest({ url: `/manga/${id}/history`, method: 'GET', dataType: 'json' }),
+      createAjaxRequest({ url: `/manga/${id}/blocklist`, method: 'GET', dataType: 'json' })
     ];
 
-    Promise.all(this.requests.map((request) => request.request)).then(([manga, items, files, downloads]) => {
-      this.setState({ manga, items: items || [], files: files || [], downloads: downloads || [], isLoading: false, error: null });
+    Promise.all(this.requests.map((request) => request.request)).then(([manga, items, files, downloads, history, blocklist]) => {
+      this.setState({ manga, items: items || [], files: files || [], downloads: downloads || [],
+        history: history || [], blocklist: blocklist || [], isLoading: false, error: null });
     }).catch((xhr) => {
       if (!xhr.aborted) {
         this.setState({ isLoading: false, error: xhr.status === 404 ? 'Manga not found.' : 'Could not load manga details.' });
@@ -69,18 +76,38 @@ class MangaDetailsPage extends Component {
   onRefreshDownloads = () => {
     const { id } = this.props.match.params;
     this.downloadRequest?.abortRequest();
+    this.fileRequest?.abortRequest();
+    this.historyRequest?.abortRequest();
+    this.blocklistRequest?.abortRequest();
     this.downloadRequest = createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' });
-    this.downloadRequest.request.then((downloads) => this.setState((state) => ({
-      downloads: downloads || [], downloadRevision: state.downloadRevision + 1
-    }))).catch((xhr) => {
+    this.fileRequest = createAjaxRequest({ url: `/manga/${id}/files`, method: 'GET', dataType: 'json' });
+    this.historyRequest = createAjaxRequest({ url: `/manga/${id}/history`, method: 'GET', dataType: 'json' });
+    this.blocklistRequest = createAjaxRequest({ url: `/manga/${id}/blocklist`, method: 'GET', dataType: 'json' });
+    Promise.all([this.downloadRequest.request, this.fileRequest.request, this.historyRequest.request, this.blocklistRequest.request])
+      .then(([downloads, files, history, blocklist]) => this.setState((state) => ({
+        downloads: downloads || [], files: files || [], history: history || [], blocklist: blocklist || [],
+        downloadRevision: state.downloadRevision + 1
+      }))).catch((xhr) => {
+        if (!xhr.aborted) {
+          this.setState({ error: 'Could not refresh manga downloads.' });
+        }
+      });
+  };
+
+  onUnblock = (blockId) => {
+    const { id } = this.props.match.params;
+    this.unblockRequest = createAjaxRequest({ url: `/manga/${id}/blocklist/${blockId}`, method: 'DELETE' });
+    this.unblockRequest.request.then(() => {
+      this.setState((state) => ({ blocklist: state.blocklist.filter((entry) => entry.id !== blockId) }));
+    }).catch((xhr) => {
       if (!xhr.aborted) {
-        this.setState({ error: 'Could not refresh manga downloads.' });
+        this.setState({ error: 'Could not clear this blocklist entry.' });
       }
     });
   };
 
   render() {
-    const { manga, items, files, downloads, downloadRevision, isLoading, isRefreshing, error } = this.state;
+    const { manga, items, files, downloads, history, blocklist, downloadRevision, isLoading, isRefreshing, error } = this.state;
     const title = manga?.preferredTitle || manga?.titleRomaji || 'Manga';
 
     return (
@@ -154,6 +181,39 @@ class MangaDetailsPage extends Component {
                             downloadId={download.id}
                           />
                         )}
+                      </li>
+                    ))}
+                  </ul>}
+              </section>
+
+              <section className={styles.section}>
+                <h2>Blocklist</h2>
+                {blocklist.length === 0 ?
+                  <p className={styles.muted}>No failed releases are blocklisted.</p> :
+                  <ul className={styles.list}>
+                    {blocklist.map((entry) => (
+                      <li key={entry.id}>
+                        {entry.releaseTitle} · {entry.reason}
+                        {' '}
+                        <button className={styles.button}
+                          type="button"
+                          onClick={() => this.onUnblock(entry.id)}
+                        >
+                          Clear Blocklist Entry
+                        </button>
+                      </li>
+                    ))}
+                  </ul>}
+              </section>
+
+              <section className={styles.section}>
+                <h2>History</h2>
+                {history.length === 0 ?
+                  <p className={styles.muted}>No manga download history yet.</p> :
+                  <ul className={styles.list}>
+                    {history.slice(0, 50).map((entry) => (
+                      <li key={entry.id}>
+                        {new Date(entry.date).toLocaleString()} · {entry.releaseTitle} · {entry.message}
                       </li>
                     ))}
                   </ul>}

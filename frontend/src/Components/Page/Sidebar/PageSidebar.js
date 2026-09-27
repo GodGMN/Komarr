@@ -109,7 +109,7 @@ const links = [
         to: '/settings/profiles'
       },
       {
-        title: () => translate('Quality'),
+        title: () => translate('QualitySettings'),
         to: '/settings/quality'
       },
       {

@@ -40,7 +40,7 @@ function Settings() {
           className={styles.link}
           to="/settings/quality"
         >
-          {translate('Quality')}
+          {translate('QualitySettings')}
         </Link>
 
         <div className={styles.summary}>

@@ -108,5 +108,25 @@ namespace NzbDrone.Core.Test.Manga
             action.Should().Throw<ArgumentException>().WithMessage("*identity cannot be changed*");
             _repository.Verify(x => x.Update(It.IsAny<MangaModel>()), Times.Never());
         }
+
+        [Test]
+        public void Update_normalizes_aliases_and_preserves_them_when_omitted()
+        {
+            var existing = new MangaModel { Id = 7, AniListId = 30149, PreferredTitle = "BLAME!" };
+            _repository.Setup(x => x.Find(7)).Returns(existing);
+            _repository.Setup(x => x.Update(It.IsAny<MangaModel>())).Returns<MangaModel>(manga => manga);
+
+            _service.Update(7, new MangaAddOptions
+            {
+                AniListId = 30149,
+                UserAliases = new List<string> { "  Buramu!  ", "buramu", "BLAME!" }
+            });
+
+            existing.UserAliases.Should().Equal("Buramu!", "BLAME!");
+
+            _service.Update(7, new MangaAddOptions { AniListId = 30149 });
+
+            existing.UserAliases.Should().Equal("Buramu!", "BLAME!");
+        }
     }
 }

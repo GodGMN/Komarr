@@ -110,7 +110,7 @@ namespace Readarr.Api.V1.System.Backup
                 throw new UnsupportedMediaTypeException($"Invalid extension, must be one of: {ValidExtensions.Join(", ")}");
             }
 
-            var path = Path.Combine(_appFolderInfo.TempFolder, $"readarr_backup_restore{extension}");
+            var path = Path.Combine(_appFolderInfo.TempFolder, $"komarr_backup_restore{extension}");
 
             _diskProvider.SaveStream(file.OpenReadStream(), path);
             _backupService.Restore(path);

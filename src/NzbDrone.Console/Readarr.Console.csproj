@@ -1,12 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <AssemblyName>Komarr.Console</AssemblyName>
     <TargetFrameworks>net10.0</TargetFrameworks>
 
     <ApplicationIcon>..\NzbDrone.Host\Readarr.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="!$(RuntimeIdentifier.StartsWith('win'))">
-    <AssemblyName>Readarr</AssemblyName>
+    <AssemblyName>Komarr</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\NzbDrone.Host\Readarr.Host.csproj" />

@@ -23,7 +23,7 @@ function getUrls(state) {
     tags
   } = state;
 
-  let icalUrl = `${window.location.host}${window.Readarr.urlBase}/feed/v1/calendar/Librarr.ics?`;
+  let icalUrl = `${window.location.host}${window.Readarr.urlBase}/feed/v1/calendar/Komarr.ics?`;
 
   if (unmonitored) {
     icalUrl += 'unmonitored=true&';
@@ -108,7 +108,7 @@ class CalendarLinkModalContent extends Component {
     return (
       <ModalContent onModalClose={onModalClose}>
         <ModalHeader>
-          Librarr Calendar Feed
+          Komarr Calendar Feed
         </ModalHeader>
 
         <ModalBody>

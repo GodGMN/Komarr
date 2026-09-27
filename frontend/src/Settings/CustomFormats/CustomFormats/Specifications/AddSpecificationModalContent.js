@@ -52,7 +52,7 @@ class AddSpecificationModalContent extends Component {
 
                 <Alert kind={kinds.INFO}>
                   <div>
-                    {'Librarr supports custom conditions against the release properties below.'}
+                    {'Komarr supports custom conditions against the release properties below.'}
                   </div>
                   <div>
                     {'Visit the wiki for more details: '}

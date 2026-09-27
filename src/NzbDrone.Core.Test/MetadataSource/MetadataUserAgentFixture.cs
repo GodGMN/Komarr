@@ -21,7 +21,7 @@ namespace NzbDrone.Core.Test.MetadataSource
         [Test]
         public void should_point_at_the_real_repository()
         {
-            MetadataUserAgent.ContactUrl.Should().Be("https://github.com/Rorqualx/Librarr");
+            MetadataUserAgent.ContactUrl.Should().Be("https://github.com/GodGMN/Komarr");
         }
 
         [Test]
@@ -36,8 +36,8 @@ namespace NzbDrone.Core.Test.MetadataSource
         {
             var ua = MetadataUserAgent.Value;
 
-            ua.Should().StartWith("Librarr/");
-            ua.Should().Contain("+https://github.com/Rorqualx/Librarr");
+            ua.Should().StartWith("Komarr/");
+            ua.Should().Contain("+https://github.com/GodGMN/Komarr");
         }
 
         [Test]

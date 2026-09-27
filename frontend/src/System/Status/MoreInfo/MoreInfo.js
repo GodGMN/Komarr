@@ -17,22 +17,22 @@ class MoreInfo extends Component {
         <DescriptionList>
           <DescriptionListItemTitle>Home page</DescriptionListItemTitle>
           <DescriptionListItemDescription>
-            <Link to="https://github.com/Rorqualx/Librarr">github.com/Rorqualx/Librarr</Link>
+            <Link to="https://github.com/GodGMN/Komarr">github.com/GodGMN/Komarr</Link>
           </DescriptionListItemDescription>
 
           <DescriptionListItemTitle>Source</DescriptionListItemTitle>
           <DescriptionListItemDescription>
-            <Link to="https://github.com/Rorqualx/Librarr">github.com/Rorqualx/Librarr</Link>
+            <Link to="https://github.com/GodGMN/Komarr">github.com/GodGMN/Komarr</Link>
           </DescriptionListItemDescription>
 
           <DescriptionListItemTitle>Bugs &amp; Feature Requests</DescriptionListItemTitle>
           <DescriptionListItemDescription>
-            <Link to="https://github.com/Rorqualx/Librarr/issues">github.com/Rorqualx/Librarr/issues</Link>
+            <Link to="https://github.com/GodGMN/Komarr/issues">github.com/GodGMN/Komarr/issues</Link>
           </DescriptionListItemDescription>
 
           <DescriptionListItemTitle>Questions &amp; Support</DescriptionListItemTitle>
           <DescriptionListItemDescription>
-            <Link to="https://github.com/Rorqualx/Librarr/discussions">github.com/Rorqualx/Librarr/discussions</Link>
+            <Link to="https://github.com/GodGMN/Komarr/discussions">github.com/GodGMN/Komarr/discussions</Link>
           </DescriptionListItemDescription>
 
           {/*

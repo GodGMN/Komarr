@@ -284,8 +284,8 @@ function Updates() {
               <div>
                 <InlineMarkdown
                   data={translate('InstallMajorVersionUpdateMessageLink', {
-                    domain: 'the Librarr releases page',
-                    url: 'https://github.com/Rorqualx/Librarr/releases',
+                    domain: 'the Komarr releases page',
+                    url: 'https://github.com/GodGMN/Komarr/releases',
                   })}
                 />
               </div>

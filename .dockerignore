@@ -1,7 +1,4 @@
-# Phase 9b Docker build context filter. Without this, `docker build`
-# uploads ~11 GB to the daemon (most of it the _tests/ tree from a
-# prior local `dotnet test` run, which the Dockerfile doesn't use
-# anyway — it publishes from source inside the image).
+# Keep generated files and local credentials out of the build context.
 
 # Build outputs / test artefacts (rebuilt inside the image)
 _output/
@@ -34,3 +31,13 @@ TestLog.txt
 # Local config / secrets if any operator drops them in tree
 *.env
 *.local
+
+# Local Runewire credentials and agent configuration
+.mcp.json
+.codex/
+AGENTS.md
+
+# Local Compose data
+docker-config/
+docker-manga/
+docker-downloads/

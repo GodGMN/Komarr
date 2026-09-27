@@ -6,6 +6,8 @@ The project is at an early implementation stage. The [product requirements](docs
 
 Komarr uses a fresh `komarr.db` in its own application data directory. Existing Readarr and Librarr databases are not migrated. The inherited in-app updater and metadata connectivity probe are disabled while their Komarr replacements are developed.
 
+To run the current build in Docker, see the [Docker instructions](distribution/docker/README.md).
+
 ## Principles
 
 1. Filesystem first.

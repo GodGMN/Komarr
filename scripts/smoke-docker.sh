@@ -45,7 +45,9 @@ check_api() {
   python3 - "$base_url" "$data_dir" "$1" <<'PY'
 import json
 import pathlib
+import sqlite3
 import sys
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -83,6 +85,18 @@ status, config = request('/api/v1/config/host')
 assert status == 200 and config['updateMechanism'].lower() == 'external'
 if mode == 'save':
     assert (data_dir / 'komarr.db').is_file(), 'Fresh Komarr database missing'
+    with sqlite3.connect(data_dir / 'komarr.db') as db:
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert {'Manga', 'MangaFiles', 'MangaDownloads'} <= tables
+        assert not {'Authors', 'Books', 'BookFiles', 'Editions', 'AuthorMetadata', 'Series', 'SeriesBookLink', 'BookIdMapping', 'Narrators', 'EditionNarrators'} & tables, 'Fresh schema still has book tables'
+    status, command = request('/api/v1/command', 'POST', {'name': 'Housekeeping'})
+    assert status == 201
+    for attempt in range(60):
+        _, command = request(f"/api/v1/command/{command['id']}")
+        if command['status'].lower() in ('completed', 'failed'):
+            break
+        time.sleep(1)
+    assert command['status'].lower() == 'completed', f"Housekeeping did not complete: {command}"
     config['instanceName'] = 'Smoke Komarr'
     status, _ = request('/api/v1/config/host/1', 'PUT', config)
     assert status == 202, f'Host settings save returned {status}'
@@ -94,6 +108,10 @@ PY
 
 start_container
 check_api save
+if docker logs "$name" 2>&1 | rg -q 'Error running housekeeping task'; then
+  echo 'Housekeeping touched an unavailable legacy table' >&2
+  exit 1
+fi
 if [[ "$run_browser" == "--browser" ]]; then
   node scripts/smoke-browser.mjs "$base_url"
 fi

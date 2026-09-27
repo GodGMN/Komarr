@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using NLog;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Commands;
@@ -8,13 +9,23 @@ namespace NzbDrone.Core.Housekeeping
 {
     public class HousekeepingService : IExecute<HousekeepingCommand>
     {
+        private static readonly HashSet<string> LegacyBookTasks = new HashSet<string>
+        {
+            "CleanupAbsolutePathMetadataFiles", "CleanupDuplicateMetadataFiles",
+            "CleanupOrphanedAuthorMetadata", "CleanupOrphanedBlocklist",
+            "CleanupOrphanedBookFiles", "CleanupOrphanedBooks", "CleanupOrphanedEditions",
+            "CleanupOrphanedHistoryItems", "CleanupOrphanedMetadataFiles",
+            "CleanupOrphanedPendingReleases", "CleanupOrphanedSeriesBookLinks",
+            "DeleteBadMediaCovers", "FixMultipleMonitoredEditions", "UpdateCleanTitleForAuthor"
+        };
+
         private readonly IEnumerable<IHousekeepingTask> _housekeepers;
         private readonly Logger _logger;
         private readonly IMainDatabase _mainDb;
 
         public HousekeepingService(IEnumerable<IHousekeepingTask> housekeepers, IMainDatabase mainDb, Logger logger)
         {
-            _housekeepers = housekeepers;
+            _housekeepers = housekeepers.Where(task => !LegacyBookTasks.Contains(task.GetType().Name));
             _logger = logger;
             _mainDb = mainDb;
         }

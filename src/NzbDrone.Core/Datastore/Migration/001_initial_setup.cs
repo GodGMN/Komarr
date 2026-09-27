@@ -14,6 +14,10 @@ namespace NzbDrone.Core.Datastore.Migration
                 .WithColumn("Key").AsString().Unique()
                 .WithColumn("Value").AsString();
 
+            // Only databases created by this version may discard the inherited
+            // book schema after the historical migrations have run.
+            Insert.IntoTable("Config").Row(new { Key = "KomarrFreshSchema", Value = "1" });
+
             Create.TableForModel("RootFolders")
                 .WithColumn("Path").AsString().Unique()
                 .WithColumn("Name").AsString().Nullable()

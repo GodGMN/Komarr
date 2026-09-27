@@ -4,8 +4,6 @@ import { connect } from 'react-redux';
 import { withRouter } from 'react-router-dom';
 import { createSelector } from 'reselect';
 import { fetchTranslations, saveDimensions, setIsSidebarVisible } from 'Store/Actions/appActions';
-import { fetchAuthor } from 'Store/Actions/authorActions';
-import { fetchBooks } from 'Store/Actions/bookActions';
 import { fetchCustomFilters } from 'Store/Actions/customFilterActions';
 import {
   fetchImportLists,
@@ -52,7 +50,6 @@ const selectAppProps = createSelector(
 );
 
 const selectIsPopulated = createSelector(
-  (state) => state.authors.isPopulated,
   (state) => state.customFilters.isPopulated,
   (state) => state.tags.isPopulated,
   (state) => state.settings.ui.isPopulated,
@@ -64,7 +61,6 @@ const selectIsPopulated = createSelector(
   (state) => state.system.status.isPopulated,
   (state) => state.app.translations.isPopulated,
   (
-    authorsIsPopulated,
     customFiltersIsPopulated,
     tagsIsPopulated,
     uiSettingsIsPopulated,
@@ -77,7 +73,6 @@ const selectIsPopulated = createSelector(
     translationsIsPopulated
   ) => {
     return (
-      authorsIsPopulated &&
       customFiltersIsPopulated &&
       tagsIsPopulated &&
       uiSettingsIsPopulated &&
@@ -93,7 +88,6 @@ const selectIsPopulated = createSelector(
 );
 
 const selectErrors = createSelector(
-  (state) => state.authors.error,
   (state) => state.customFilters.error,
   (state) => state.tags.error,
   (state) => state.settings.ui.error,
@@ -105,7 +99,6 @@ const selectErrors = createSelector(
   (state) => state.system.status.error,
   (state) => state.app.translations.error,
   (
-    authorsError,
     customFiltersError,
     tagsError,
     uiSettingsError,
@@ -118,7 +111,6 @@ const selectErrors = createSelector(
     translationsError
   ) => {
     const hasError = !!(
-      authorsError ||
       customFiltersError ||
       tagsError ||
       uiSettingsError ||
@@ -177,12 +169,6 @@ function createMapStateToProps() {
 
 function createMapDispatchToProps(dispatch, props) {
   return {
-    dispatchFetchAuthor() {
-      dispatch(fetchAuthor());
-    },
-    dispatchFetchBooks() {
-      dispatch(fetchBooks());
-    },
     dispatchFetchCustomFilters() {
       dispatch(fetchCustomFilters());
     },
@@ -237,8 +223,6 @@ class PageConnector extends Component {
 
   componentDidMount() {
     if (!this.props.isPopulated) {
-      this.props.dispatchFetchAuthor();
-      this.props.dispatchFetchBooks();
       this.props.dispatchFetchCustomFilters();
       this.props.dispatchFetchTags();
       this.props.dispatchFetchLanguages();
@@ -266,8 +250,6 @@ class PageConnector extends Component {
     const {
       isPopulated,
       hasError,
-      dispatchFetchAuthor,
-      dispatchFetchBooks,
       dispatchFetchTags,
       dispatchFetchLanguages,
       dispatchFetchQualityProfiles,
@@ -308,8 +290,6 @@ PageConnector.propTypes = {
   isPopulated: PropTypes.bool.isRequired,
   hasError: PropTypes.bool.isRequired,
   isSidebarVisible: PropTypes.bool.isRequired,
-  dispatchFetchAuthor: PropTypes.func.isRequired,
-  dispatchFetchBooks: PropTypes.func.isRequired,
   dispatchFetchCustomFilters: PropTypes.func.isRequired,
   dispatchFetchTags: PropTypes.func.isRequired,
   dispatchFetchLanguages: PropTypes.func.isRequired,

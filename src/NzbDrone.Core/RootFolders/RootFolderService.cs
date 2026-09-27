@@ -8,7 +8,6 @@ using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnsureThat;
 using NzbDrone.Common.Extensions;
-using NzbDrone.Core.Books;
 
 namespace NzbDrone.Core.RootFolders
 {
@@ -29,8 +28,7 @@ namespace NzbDrone.Core.RootFolders
 
     public class RootFolderService : IRootFolderService
     {
-        // Folders that live alongside author folders in a root but are never an
-        // author. Matched case-insensitively against the leaf directory name.
+        // Ignore system folders while listing direct children of a root.
         // ".caltrash" is Calibre's recycle bin and shows up in Calibre-backed
         // root folders.
         private static readonly HashSet<string> SpecialFolders = new (StringComparer.OrdinalIgnoreCase)
@@ -48,21 +46,14 @@ namespace NzbDrone.Core.RootFolders
         };
 
         private readonly IRootFolderRepository _rootFolderRepository;
-        private readonly IAuthorRepository _authorRepository;
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
 
-        // Takes IAuthorRepository rather than IAuthorService deliberately:
-        // IAuthorService -> IBuildAuthorPaths -> IRootFolderService is a cycle
-        // DryIoc would refuse to resolve. The repository only needs the
-        // database, so it closes nothing.
         public RootFolderService(IRootFolderRepository rootFolderRepository,
-                                 IAuthorRepository authorRepository,
                                  IDiskProvider diskProvider,
                                  Logger logger)
         {
             _rootFolderRepository = rootFolderRepository;
-            _authorRepository = authorRepository;
             _diskProvider = diskProvider;
             _logger = logger;
         }
@@ -193,13 +184,8 @@ namespace NzbDrone.Core.RootFolders
             return possibleRootFolder?.Path;
         }
 
-        // Every first-level subdirectory of the root that isn't already an
-        // author folder. This is what the Library Import wizard walks: one row
-        // per folder, each waiting to be paired with an OpenLibrary author.
-        //
-        // Note the comparison is against author paths, not author names — a
-        // folder counts as mapped once some author points at it, whatever it
-        // happens to be called on disk.
+        // This inherited response field is supplementary root-folder detail.
+        // Manga folder mapping uses the dedicated manga APIs.
         public List<UnmappedFolder> GetUnmappedFolders(string rootFolderPath)
         {
             Ensure.That(rootFolderPath, () => rootFolderPath).IsNotNullOrWhiteSpace();
@@ -210,10 +196,7 @@ namespace NzbDrone.Core.RootFolders
                 return new List<UnmappedFolder>();
             }
 
-            var authorPaths = _authorRepository.AllAuthorPaths().Select(x => x.Value).ToList();
-
             return _diskProvider.GetDirectories(rootFolderPath)
-                .Except(authorPaths, PathEqualityComparer.Instance)
                 .Select(path => new UnmappedFolder
                 {
                     Name = new DirectoryInfo(path).Name,

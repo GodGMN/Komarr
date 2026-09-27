@@ -15,7 +15,6 @@ using NzbDrone.Core.Datastore.Events;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.MediaFiles
@@ -25,11 +24,9 @@ namespace NzbDrone.Core.MediaFiles
         void ReportFileSystemChangeBeginning(params string[] paths);
     }
 
-    public sealed class RootFolderWatchingService : IRootFolderWatchingService,
-        IDisposable,
-        IHandle<ModelEvent<RootFolder>>,
-        IHandle<ApplicationStartedEvent>,
-        IHandle<ConfigSavedEvent>
+    // The inherited watcher issues book rescans. Keep its interface for old
+    // book services, but do not subscribe it to startup or folder events.
+    public sealed class RootFolderWatchingService : IRootFolderWatchingService, IDisposable
     {
         private const int DEBOUNCE_TIMEOUT_SECONDS = 30;
 

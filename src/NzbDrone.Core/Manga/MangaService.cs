@@ -21,6 +21,13 @@ namespace NzbDrone.Core.Manga
         public MangaReleasePolicy QualityPolicy { get; set; }
     }
 
+    public class MangaItemAddOptions
+    {
+        public string NumberText { get; set; }
+        public string Title { get; set; }
+        public bool Monitored { get; set; } = true;
+    }
+
     public class MangaMetadataException : Exception
     {
         public MangaMetadataException(string message, AniListAvailability availability)
@@ -42,6 +49,8 @@ namespace NzbDrone.Core.Manga
         Manga Refresh(int id);
         void Delete(int id);
         IEnumerable<MangaItem> GetItems(int mangaId);
+        MangaItem AddItem(int mangaId, MangaItemAddOptions options);
+        MangaItem SetItemMonitored(int mangaId, int itemId, bool monitored);
         IEnumerable<MangaFile> GetFiles(int mangaId);
     }
 
@@ -67,6 +76,52 @@ namespace NzbDrone.Core.Manga
         public Manga FindByAniListId(int id) => _repository.FindByAniListId(id);
 
         public IEnumerable<MangaItem> GetItems(int mangaId) => _items.GetByMangaId(mangaId);
+
+        public MangaItem AddItem(int mangaId, MangaItemAddOptions options)
+        {
+            var manga = Find(mangaId) ?? throw new KeyNotFoundException("Manga was not found.");
+            if (options == null || string.IsNullOrWhiteSpace(options.NumberText))
+            {
+                throw new ArgumentException("Enter a volume or chapter number.");
+            }
+
+            var type = manga.TrackingMode == MangaTrackingMode.Volume ? MangaItemType.Volume : MangaItemType.Chapter;
+            var item = new MangaItem
+            {
+                MangaId = mangaId,
+                Type = type,
+                Title = options.Title?.Trim(),
+                Monitored = options.Monitored,
+                DiscoveredFrom = MangaItemDiscoverySource.Manual,
+                Added = DateTime.UtcNow
+            };
+            item.SetNumber(options.NumberText);
+            if (_items.GetByMangaId(mangaId).Any(existing => existing.Type == type &&
+                (string.Equals(existing.NumberText, item.NumberText, StringComparison.OrdinalIgnoreCase) ||
+                    (existing.NumberDecimal.HasValue && existing.NumberDecimal == item.NumberDecimal))))
+            {
+                throw new InvalidOperationException("This manga item is already known.");
+            }
+
+            return _items.Insert(item);
+        }
+
+        public MangaItem SetItemMonitored(int mangaId, int itemId, bool monitored)
+        {
+            if (Find(mangaId) == null)
+            {
+                throw new KeyNotFoundException("Manga was not found.");
+            }
+
+            var item = _items.Find(itemId);
+            if (item?.MangaId != mangaId)
+            {
+                throw new KeyNotFoundException("Manga item was not found.");
+            }
+
+            item.Monitored = monitored;
+            return _items.Update(item);
+        }
 
         public IEnumerable<MangaFile> GetFiles(int mangaId) => _files.GetByMangaId(mangaId);
 
@@ -208,6 +263,11 @@ namespace NzbDrone.Core.Manga
 
         private void SyncKnownItems(Manga manga)
         {
+            if (!string.Equals(manga.Status, "FINISHED", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             var count = manga.TrackingMode == MangaTrackingMode.Volume ? manga.AniListVolumeCount : manga.AniListChapterCount;
             var limit = manga.TrackingMode == MangaTrackingMode.Volume ? 500 : 2000;
             if (!count.HasValue || count.Value <= 0 || count.Value > limit)

@@ -12,6 +12,8 @@ namespace NzbDrone.Core.Manga
         public List<string> AllowedContainers { get; set; } = new ();
         public List<string> AllowedSources { get; set; } = new ();
         public List<string> AllowedEditions { get; set; } = new ();
+        public List<string> SourcePreference { get; set; } = new ();
+        public string UpgradeCutoffSource { get; set; }
         public List<string> BlockedReleaseIds { get; set; } = new ();
         public long? MinimumSizeBytes { get; set; }
         public long? MaximumSizeBytes { get; set; }
@@ -24,6 +26,7 @@ namespace NzbDrone.Core.Manga
         public List<string> Rejections { get; set; } = new ();
         public List<string> ReviewReasons { get; set; } = new ();
         public List<string> Evidence { get; set; } = new ();
+        public bool IsUpgrade { get; set; }
         public bool CanGrabManually => Rejections.Count == 0;
         public bool CanGrabAutomatically => CanGrabManually && ReviewReasons.Count == 0;
     }
@@ -99,13 +102,22 @@ namespace NzbDrone.Core.Manga
                 decision.Rejections.Add("Covered manga items are not monitored.");
             }
 
-            var ownedFileIds = (files ?? Enumerable.Empty<MangaFile>()).Where(file => file.MangaId == manga.Id)
-                .Select(file => file.Id).ToHashSet();
-            var ownedItemIds = (fileItems ?? Enumerable.Empty<MangaFileItem>())
-                .Where(link => ownedFileIds.Contains(link.MangaFileId)).Select(link => link.MangaItemId).ToHashSet();
+            var mangaFiles = (files ?? Enumerable.Empty<MangaFile>()).Where(file => file.MangaId == manga.Id).ToList();
+            var ownedFileIds = mangaFiles.Select(file => file.Id).ToHashSet();
+            var links = (fileItems ?? Enumerable.Empty<MangaFileItem>())
+                .Where(link => ownedFileIds.Contains(link.MangaFileId)).ToList();
+            var ownedItemIds = links.Select(link => link.MangaItemId).ToHashSet();
             if (candidate.CoveredItems.Count > 0 && candidate.CoveredItems.All(item => ownedItemIds.Contains(item.Id)))
             {
-                decision.Rejections.Add("All covered manga items already have imported files.");
+                if (CanUpgrade(policy, match.Release, candidate.CoveredItems, mangaFiles, links))
+                {
+                    decision.IsUpgrade = true;
+                    decision.Evidence.Add($"Source upgrade from imported files toward the {policy.UpgradeCutoffSource} cutoff.");
+                }
+                else
+                {
+                    decision.Rejections.Add("All covered manga items already have imported files or meet the upgrade cutoff.");
+                }
             }
 
             if (IsBlocked(policy, release))
@@ -116,6 +128,11 @@ namespace NzbDrone.Core.Manga
             CheckAllowed(decision, policy.AllowedLanguages, match.Release?.Language, "language");
             CheckAllowed(decision, policy.AllowedSources, match.Release?.Source, "source");
             CheckAllowed(decision, policy.AllowedEditions, match.Release?.EditionHint, "edition");
+            if (!string.IsNullOrWhiteSpace(match.Release?.EditionHint) && policy.AllowedEditions.Count == 0)
+            {
+                decision.ReviewReasons.Add("Edition variant requires an explicit allowed-edition policy for automatic acquisition.");
+            }
+
             CheckAllowed(decision, policy.AllowedContainers, GetContainer(release), "container");
 
             if (policy.MinimumSizeBytes.HasValue && release.Size < policy.MinimumSizeBytes.Value)
@@ -164,6 +181,49 @@ namespace NzbDrone.Core.Manga
             return policy.BlockedReleaseIds.Any(value =>
                 string.Equals(value, release.Guid, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(value, release.DownloadUrl, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool CanUpgrade(
+            MangaReleasePolicy policy,
+            ParsedMangaReleaseInfo parsed,
+            List<MangaItem> covered,
+            List<MangaFile> files,
+            List<MangaFileItem> links)
+        {
+            if (policy.SourcePreference.Count == 0 || string.IsNullOrWhiteSpace(policy.UpgradeCutoffSource) ||
+                string.IsNullOrWhiteSpace(parsed?.Source))
+            {
+                return false;
+            }
+
+            var preference = policy.SourcePreference.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var releaseRank = preference.FindIndex(value => string.Equals(value, parsed.Source, StringComparison.OrdinalIgnoreCase));
+            var cutoffRank = preference.FindIndex(value => string.Equals(value, policy.UpgradeCutoffSource, StringComparison.OrdinalIgnoreCase));
+            if (releaseRank <= 0 || cutoffRank < releaseRank)
+            {
+                return false;
+            }
+
+            var byId = files.ToDictionary(file => file.Id);
+            foreach (var item in covered)
+            {
+                var existing = links.Where(link => link.MangaItemId == item.Id).Select(link => byId[link.MangaFileId]).ToList();
+                if (existing.Count == 0 || existing.Any(file =>
+                    !string.Equals(file.Language, parsed.Language, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(file.EditionLabel, parsed.EditionHint, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return false;
+                }
+
+                var ranks = existing.Select(file => preference.FindIndex(value =>
+                    string.Equals(value, file.Source, StringComparison.OrdinalIgnoreCase))).ToList();
+                if (ranks.Any(rank => rank < 0) || ranks.Max() >= releaseRank || ranks.Max() >= cutoffRank)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static void CheckAllowed(MangaReleaseDecision decision, List<string> allowed, string value, string dimension)

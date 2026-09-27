@@ -43,6 +43,7 @@ namespace NzbDrone.Core.Manga
     public interface IMangaGrabService
     {
         Task<MangaDownload> Grab(int mangaId, MangaGrabRequest request);
+        Task<MangaDownload> GrabAutomatic(int mangaId, ReleaseInfo release, int? itemId = null);
         IEnumerable<MangaDownload> GetDownloads(int mangaId);
     }
 
@@ -114,12 +115,6 @@ namespace NzbDrone.Core.Manga
             }
 
             var manga = _manga.Find(mangaId) ?? throw new KeyNotFoundException("Manga was not found.");
-            var items = _manga.GetItems(mangaId).ToList();
-            if (request.ItemId.HasValue && items.All(item => item.Id != request.ItemId.Value))
-            {
-                throw new MangaGrabValidationException("Requested item does not belong to this manga.");
-            }
-
             var search = await _indexers.Search(manga);
             var release = search.Releases.FirstOrDefault(value => value.IndexerId == request.IndexerId &&
                 string.Equals(value.Guid, request.Guid, StringComparison.Ordinal) &&
@@ -127,6 +122,36 @@ namespace NzbDrone.Core.Manga
             if (release == null)
             {
                 throw new MangaGrabValidationException("Selected release is no longer available from this indexer. Search again.");
+            }
+
+            return await GrabRelease(manga, release, request, false);
+        }
+
+        public Task<MangaDownload> GrabAutomatic(int mangaId, ReleaseInfo release, int? itemId = null)
+        {
+            if (release == null || string.IsNullOrWhiteSpace(release.Guid) || string.IsNullOrWhiteSpace(release.Title))
+            {
+                throw new MangaGrabValidationException("Automatic manga grab requires a release GUID and title.");
+            }
+
+            var manga = _manga.Find(mangaId) ?? throw new KeyNotFoundException("Manga was not found.");
+            var request = new MangaGrabRequest
+            {
+                Guid = release.Guid,
+                Title = release.Title,
+                IndexerId = release.IndexerId,
+                ItemId = itemId
+            };
+            return GrabRelease(manga, release, request, true);
+        }
+
+        private async Task<MangaDownload> GrabRelease(Manga manga, ReleaseInfo release, MangaGrabRequest request, bool automatic)
+        {
+            var mangaId = manga.Id;
+            var items = _manga.GetItems(mangaId).ToList();
+            if (request.ItemId.HasValue && items.All(item => item.Id != request.ItemId.Value))
+            {
+                throw new MangaGrabValidationException("Requested item does not belong to this manga.");
             }
 
             if (_blocklist.IsBlocked(mangaId, release.IndexerId, release.Guid))
@@ -140,12 +165,18 @@ namespace NzbDrone.Core.Manga
             var files = _manga.GetFiles(mangaId).ToList();
             var fileItems = _fileItems.GetByFileIds(files.Select(file => file.Id));
             var decision = _decisions.Evaluate(manga, match, candidate, release, files, fileItems, requestedItemId: request.ItemId);
-            if (!decision.CanGrabManually)
+            if (automatic && (!decision.CanGrabAutomatically || candidate.CoveredItems.Any(item => !item.Monitored)))
+            {
+                throw new MangaGrabValidationException(string.Join(" ", decision.Rejections.Concat(decision.ReviewReasons).DefaultIfEmpty(
+                    "Automatic grab requires monitored items and an unambiguous release.")));
+            }
+
+            if (!automatic && !decision.CanGrabManually)
             {
                 throw new MangaGrabValidationException(string.Join(" ", decision.Rejections));
             }
 
-            if (decision.ReviewReasons.Count > 0 && !request.ConfirmManualReview)
+            if (!automatic && decision.ReviewReasons.Count > 0 && !request.ConfirmManualReview)
             {
                 throw new MangaGrabValidationException("Review this release and confirm the manual selection before grabbing.");
             }
@@ -177,10 +208,12 @@ namespace NzbDrone.Core.Manga
             MangaDownload download;
             lock (_grabLock)
             {
-                if (_downloads.GetByMangaId(mangaId).Any(value => value.IndexerId == request.IndexerId &&
-                    value.ReleaseGuid == request.Guid && value.Status != MangaDownloadStatus.Failed))
+                if (_downloads.GetByMangaId(mangaId).Any(value =>
+                    ((value.IndexerId == request.IndexerId && value.ReleaseGuid == request.Guid && value.Status != MangaDownloadStatus.Failed) ||
+                        (automatic && value.Status is MangaDownloadStatus.Pending or MangaDownloadStatus.Sent &&
+                            value.CoveredItemIds.Intersect(pending.CoveredItemIds).Any()))))
                 {
-                    throw new MangaGrabValidationException("This release was already sent to a download client.");
+                    throw new MangaGrabValidationException("This release was already sent or its covered items are already being downloaded.");
                 }
 
                 download = _downloads.Insert(pending);
@@ -191,7 +224,7 @@ namespace NzbDrone.Core.Manga
                 Release = release,
                 Author = new Author { Name = manga.PreferredTitle ?? manga.TitleRomaji, Tags = manga.Tags?.ToHashSet() ?? new HashSet<int>() },
                 Books = new List<Book> { new Book { Title = release.Title, ReleaseDate = release.PublishDate } },
-                ReleaseSource = ReleaseSourceType.InteractiveSearch,
+                ReleaseSource = automatic ? ReleaseSourceType.Rss : ReleaseSourceType.InteractiveSearch,
                 DownloadAllowed = true
             };
             string downloadId;
@@ -211,7 +244,7 @@ namespace NzbDrone.Core.Manga
                 _downloads.Update(download);
                 RecordHistory(download, MangaHistoryEventType.GrabFailed, download.Error);
                 _clientStatus.RecordFailure(client.Definition.Id);
-                _logger.Warn("Manual manga grab failed on client {0}: {1}", client.Definition.Name, ex.GetType().Name);
+                _logger.Warn("Manga grab failed on client {0}: {1}", client.Definition.Name, ex.GetType().Name);
                 throw;
             }
 
@@ -219,7 +252,10 @@ namespace NzbDrone.Core.Manga
             download.Status = MangaDownloadStatus.Sent;
             download.LastUpdated = DateTime.UtcNow;
             download = _downloads.Update(download);
-            RecordHistory(download, MangaHistoryEventType.Grabbed, $"Sent to {download.DownloadClient}.");
+            RecordHistory(
+                download,
+                MangaHistoryEventType.Grabbed,
+                $"{(automatic ? "Automatic" : "Manual")} selection passed manga checks and was sent to {download.DownloadClient}.");
             _clientStatus.RecordSuccess(client.Definition.Id);
             _events.PublishEvent(new MangaGrabbedEvent(download));
             return download;

@@ -75,6 +75,7 @@ namespace NzbDrone.Core.Test.Manga
                 _disk.Object,
                 _config.Object,
                 _history.Object,
+                new MangaReleaseParser(),
                 LogManager.GetCurrentClassLogger());
         }
 
@@ -94,6 +95,18 @@ namespace NzbDrone.Core.Test.Manga
             _file.Status.Should().Be(MangaDownloadFileStatus.Imported);
             _file.MangaFileId.Should().Be(43);
             _history.Verify(value => value.Record(_download, MangaHistoryEventType.Imported, It.IsAny<string>(), _file), Times.Once());
+        }
+
+        [Test]
+        public void Import_records_release_source_for_later_upgrade_decisions()
+        {
+            _download.ReleaseTitle = "BLAME! v01 (Digital) [English]";
+            _disk.Setup(value => value.TryCreateHardLink(Source, Target)).Returns(true);
+
+            _service.ImportReady(_download).Should().Be(1);
+
+            _libraryFiles.Verify(value => value.Insert(It.Is<MangaFile>(file =>
+                file.Source == "Digital" && file.Language == "English")), Times.Once());
         }
 
         [Test]

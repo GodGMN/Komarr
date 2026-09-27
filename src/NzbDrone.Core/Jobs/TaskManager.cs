@@ -4,17 +4,14 @@ using System.Linq;
 using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Core.Backup;
-using NzbDrone.Core.Books.Commands;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Configuration.Events;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.HealthCheck;
 using NzbDrone.Core.Housekeeping;
-using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Manga;
-using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 
@@ -87,18 +84,6 @@ namespace NzbDrone.Core.Jobs
                     new ScheduledTask
                     {
                         Interval = 24 * 60,
-                        TypeName = typeof(RefreshAuthorCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 24 * 60,
-                        TypeName = typeof(RescanFoldersCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 24 * 60,
                         TypeName = typeof(HousekeepingCommand).FullName
                     },
 
@@ -106,12 +91,6 @@ namespace NzbDrone.Core.Jobs
                     {
                         Interval = GetBackupInterval(),
                         TypeName = typeof(BackupCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 5,
-                        TypeName = typeof(ImportListSyncCommand).FullName
                     },
 
                     new ScheduledTask

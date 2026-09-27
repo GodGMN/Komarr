@@ -5,8 +5,8 @@ Schedules recurring `ICommand` dispatches.
 ## Key types
 
 - `TaskManager.cs` (~224 LoC) — owns the schedule table. On startup, seeds
-  default tasks (RSS sync, refresh metadata, refresh monitored downloads,
-  housekeeping, backup, etc.) and persists per-user-customised intervals.
+  default tasks (RSS sync, manga search, refresh monitored downloads,
+  housekeeping, backup, etc.) and persists their intervals.
 - `Scheduler.cs` (~71 LoC) — timer that wakes every 30 s, checks for
   due tasks, and enqueues their commands via `CommandQueueManager`.
 - `ScheduledTask.cs` — DB-stored task row.
@@ -16,9 +16,8 @@ Schedules recurring `ICommand` dispatches.
 
 - `RssSyncCommand` — every 15 min.
 - `RefreshMonitoredDownloadsCommand` — every 1 min.
-- `ApplicationUpdateCommand` — every 6 hours (if auto-update enabled).
 - `HousekeepingCommand` — every 24 hours.
-- `RefreshAuthorCommand` — every 12 hours per author.
+- `MangaSearchMissingCommand` — every hour.
 - `BackupCommand` — every week.
 - `CheckHealthCommand` — every hour.
 

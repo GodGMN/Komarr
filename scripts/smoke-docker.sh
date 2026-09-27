@@ -71,6 +71,11 @@ for path in ('/api/v1/indexer', '/api/v1/command'):
     status, _ = request(path)
     assert status == 200, f'{path} returned {status}'
 
+status, tasks = request('/api/v1/system/task')
+assert status == 200
+legacy = {'RefreshAuthor', 'RescanFolders', 'ImportListSync'}
+assert not legacy.intersection(task['taskName'] for task in tasks), 'Book-only background jobs remain scheduled'
+
 status, updates = request('/api/v1/update')
 assert status == 200 and updates == [], 'Inherited update feed is active'
 

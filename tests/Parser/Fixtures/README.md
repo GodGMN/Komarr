@@ -1,0 +1,9 @@
+# Manga release fixture corpus
+
+`nyaa-public-2026-09-27.jsonl` is a reviewed snapshot of 500 public release titles from [Nyaa's literature RSS search](https://nyaa.si/?page=rss&c=3_1). It contains titles and query terms only; it contains no torrent links, files, or downloaded content. The source query is recorded with each fixture so contributors can find similar naming patterns.
+
+Each line has `input`, `source`, `sourceQuery`, `reviewed`, and `expected`. The expected result records a cleaned title, volume or chapter unit, decimal-safe start and end text, pack status, and confidence. `Unknown` means the release must not be automatically interpreted as a volume or chapter. This includes bare numbers, mixed coverage, audiobooks, light novels, and update bundles. Some fixtures include edition, language, or source hints when the release title says so explicitly.
+
+The reviewed snapshot has 230 volume cases, 116 chapter cases, and 154 unresolved cases. We inspected the volume, chapter, and unresolved lists in batches and changed uncertain labels to `Unknown`; missed releases are safer than incorrect automatic grabs. Coverage includes scans, digital compilations, omnibus editions, groups, Japanese and romaji titles, punctuation, ranges, and packs.
+
+Run `python3 scripts/check_manga_fixtures.py` to validate the corpus. Before the parser is connected, the report identifies itself as an **unresolved baseline**. Once the parser can emit JSONL rows with `input` and `actual` fields, pass `--predictions path/to/results.jsonl` to report false positives separately from false negatives. A wrong positive is counted in both categories because it could acquire the wrong item and also miss the intended one. Automatic grabs must remain disabled until parser results on this corpus are reviewed and the unsafe cases are rejected.

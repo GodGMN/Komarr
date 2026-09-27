@@ -164,6 +164,28 @@ namespace NzbDrone.Core.Test.Manga
         }
 
         [Test]
+        public void Manual_entry_can_confirm_a_stale_metadata_item_on_ongoing_manga()
+        {
+            var manga = new MangaModel { Id = 7, Status = "RELEASING", TrackingMode = MangaTrackingMode.Volume };
+            var stale = new MangaItem
+            {
+                Id = 12, MangaId = 7, Type = MangaItemType.Volume,
+                Monitored = false, DiscoveredFrom = MangaItemDiscoverySource.Metadata
+            };
+            stale.SetNumber("11");
+            _repository.Setup(x => x.Find(7)).Returns(manga);
+            _items.Setup(x => x.GetByMangaId(7)).Returns(new[] { stale });
+            _items.Setup(x => x.Update(It.IsAny<MangaItem>())).Returns<MangaItem>(item => item);
+
+            var confirmed = _service.AddItem(7, new MangaItemAddOptions { NumberText = "011", Monitored = true });
+
+            confirmed.Id.Should().Be(12);
+            confirmed.DiscoveredFrom.Should().Be(MangaItemDiscoverySource.Manual);
+            confirmed.Monitored.Should().BeTrue();
+            _items.Verify(x => x.Insert(It.IsAny<MangaItem>()), Times.Never());
+        }
+
+        [Test]
         public void Update_rejects_identity_change()
         {
             _repository.Setup(x => x.Find(7)).Returns(new MangaModel { Id = 7, AniListId = 30149 });

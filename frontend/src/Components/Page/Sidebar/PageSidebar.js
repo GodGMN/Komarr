@@ -65,16 +65,12 @@ const links = [
 
   {
     iconName: icons.WARNING,
-    title: () => translate('Wanted'),
-    to: '/wanted/missing',
+    title: () => 'Wanted',
+    to: '/manga/wanted',
     children: [
       {
-        title: () => translate('Missing'),
-        to: '/wanted/missing'
-      },
-      {
-        title: () => translate('CutoffUnmet'),
-        to: '/wanted/cutoffunmet'
+        title: () => 'Missing Manga',
+        to: '/manga/wanted'
       }
     ]
   },

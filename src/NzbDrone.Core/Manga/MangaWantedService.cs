@@ -13,6 +13,7 @@ namespace NzbDrone.Core.Manga
         public string NumberText { get; set; }
         public decimal? NumberDecimal { get; set; }
         public bool Monitored { get; set; }
+        public bool ItemMonitored { get; set; }
         public bool Owned { get; set; }
         public bool InProgress { get; set; }
         public bool Missing => Monitored && !Owned;
@@ -58,7 +59,10 @@ namespace NzbDrone.Core.Manga
         private List<MangaWantedItem> GetForManga(Manga manga)
         {
             var type = manga.TrackingMode == MangaTrackingMode.Volume ? MangaItemType.Volume : MangaItemType.Chapter;
-            var items = _manga.GetItems(manga.Id).Where(item => item.Type == type).ToList();
+            var hasFinalCount = string.Equals(manga.Status, "FINISHED", System.StringComparison.OrdinalIgnoreCase);
+            var items = _manga.GetItems(manga.Id)
+                .Where(item => item.Type == type && (hasFinalCount || item.DiscoveredFrom != MangaItemDiscoverySource.Metadata))
+                .ToList();
             var fileIds = _manga.GetFiles(manga.Id).Select(file => file.Id).ToList();
             var owned = _coverage.GetByFileIds(fileIds).Select(link => link.MangaItemId).ToHashSet();
             var inProgress = _downloads.GetByMangaId(manga.Id)
@@ -75,6 +79,7 @@ namespace NzbDrone.Core.Manga
                 NumberText = item.NumberText,
                 NumberDecimal = item.NumberDecimal,
                 Monitored = manga.Monitored && item.Monitored,
+                ItemMonitored = item.Monitored,
                 Owned = owned.Contains(item.Id),
                 InProgress = inProgress.Contains(item.Id)
             }).OrderBy(item => item.NumberDecimal ?? decimal.MaxValue).ThenBy(item => item.NumberText).ToList();

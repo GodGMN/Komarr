@@ -72,5 +72,36 @@ namespace NzbDrone.Core.Test.Manga
 
             service.GetMissing().Should().BeEmpty();
         }
+
+        [Test]
+        public void Ongoing_series_keeps_manual_items_but_ignores_old_assumed_metadata_items()
+        {
+            var manga = new MangaModel { Id = 7, Status = "RELEASING", TrackingMode = MangaTrackingMode.Volume, Monitored = true };
+            var assumed = new MangaItem
+            {
+                Id = 1, MangaId = 7, Type = MangaItemType.Volume,
+                Monitored = true, DiscoveredFrom = MangaItemDiscoverySource.Metadata
+            };
+            assumed.SetNumber("1");
+            var manual = new MangaItem
+            {
+                Id = 2, MangaId = 7, Type = MangaItemType.Volume,
+                Monitored = true, DiscoveredFrom = MangaItemDiscoverySource.Manual
+            };
+            manual.SetNumber("2");
+            var mangaService = new Mock<IMangaService>();
+            mangaService.Setup(value => value.Find(7)).Returns(manga);
+            mangaService.Setup(value => value.All()).Returns(new[] { manga });
+            mangaService.Setup(value => value.GetItems(7)).Returns(new[] { assumed, manual });
+            mangaService.Setup(value => value.GetFiles(7)).Returns(new MangaFile[0]);
+            var coverage = new Mock<IMangaFileItemRepository>();
+            coverage.Setup(value => value.GetByFileIds(It.IsAny<IEnumerable<int>>())).Returns(new MangaFileItem[0]);
+            var downloads = new Mock<IMangaDownloadRepository>();
+            downloads.Setup(value => value.GetByMangaId(7)).Returns(new MangaDownload[0]);
+            var service = new MangaWantedService(mangaService.Object, coverage.Object, downloads.Object);
+
+            service.GetForManga(7).Select(item => item.NumberText).Should().Equal("2");
+            service.GetMissing().Select(item => item.NumberText).Should().Equal("2");
+        }
     }
 }

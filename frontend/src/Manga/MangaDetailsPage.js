@@ -13,12 +13,20 @@ function downloadStatus(status) {
   return ['Pending', 'Sent', 'Completed', 'Failed'][status] || 'Unknown';
 }
 
+function wantedStatus(item) {
+  if (item.owned) {
+    return 'Owned';
+  }
+
+  return item.monitored ? 'Missing' : 'Not monitored';
+}
+
 class MangaDetailsPage extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { manga: null, items: [], files: [], downloads: [], history: [], blocklist: [], downloadRevision: 0,
-      isLoading: true, isRefreshing: false, error: null };
+    this.state = { manga: null, items: [], wanted: [], files: [], downloads: [], history: [], blocklist: [], downloadRevision: 0,
+      newItemNumber: '', isAddingItem: false, isLoading: true, isRefreshing: false, error: null };
   }
 
   componentDidMount() {
@@ -33,6 +41,9 @@ class MangaDetailsPage extends Component {
     this.historyRequest?.abortRequest();
     this.blocklistRequest?.abortRequest();
     this.unblockRequest?.abortRequest();
+    this.addItemRequest?.abortRequest();
+    this.monitorRequest?.abortRequest();
+    this.wantedRequest?.abortRequest();
   }
 
   load = () => {
@@ -40,14 +51,15 @@ class MangaDetailsPage extends Component {
     this.requests = [
       createAjaxRequest({ url: `/manga/${id}`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/items`, method: 'GET', dataType: 'json' }),
+      createAjaxRequest({ url: `/manga/${id}/wanted`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/files`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/history`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/blocklist`, method: 'GET', dataType: 'json' })
     ];
 
-    Promise.all(this.requests.map((request) => request.request)).then(([manga, items, files, downloads, history, blocklist]) => {
-      this.setState({ manga, items: items || [], files: files || [], downloads: downloads || [],
+    Promise.all(this.requests.map((request) => request.request)).then(([manga, items, wanted, files, downloads, history, blocklist]) => {
+      this.setState({ manga, items: items || [], wanted: wanted || [], files: files || [], downloads: downloads || [],
         history: history || [], blocklist: blocklist || [], isLoading: false, error: null });
     }).catch((xhr) => {
       if (!xhr.aborted) {
@@ -60,8 +72,9 @@ class MangaDetailsPage extends Component {
     const { id } = this.props.match.params;
     this.setState({ isRefreshing: true, error: null });
     this.refreshRequest = createAjaxRequest({ url: `/manga/${id}/refresh`, method: 'POST', dataType: 'json' });
-    this.refreshRequest.request.then((manga) => {
-      this.setState({ manga, isRefreshing: false });
+    this.refreshRequest.request.then(() => {
+      this.setState({ isRefreshing: false });
+      this.load();
     }).catch((xhr) => {
       if (!xhr.aborted) {
         this.setState({ isRefreshing: false, error: 'Could not refresh AniList metadata. Your saved manga is unchanged.' });
@@ -79,13 +92,16 @@ class MangaDetailsPage extends Component {
     this.fileRequest?.abortRequest();
     this.historyRequest?.abortRequest();
     this.blocklistRequest?.abortRequest();
+    this.wantedRequest?.abortRequest();
     this.downloadRequest = createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' });
     this.fileRequest = createAjaxRequest({ url: `/manga/${id}/files`, method: 'GET', dataType: 'json' });
     this.historyRequest = createAjaxRequest({ url: `/manga/${id}/history`, method: 'GET', dataType: 'json' });
     this.blocklistRequest = createAjaxRequest({ url: `/manga/${id}/blocklist`, method: 'GET', dataType: 'json' });
-    Promise.all([this.downloadRequest.request, this.fileRequest.request, this.historyRequest.request, this.blocklistRequest.request])
-      .then(([downloads, files, history, blocklist]) => this.setState((state) => ({
-        downloads: downloads || [], files: files || [], history: history || [], blocklist: blocklist || [],
+    this.wantedRequest = createAjaxRequest({ url: `/manga/${id}/wanted`, method: 'GET', dataType: 'json' });
+    Promise.all([this.downloadRequest.request, this.fileRequest.request, this.historyRequest.request,
+      this.blocklistRequest.request, this.wantedRequest.request])
+      .then(([downloads, files, history, blocklist, wanted]) => this.setState((state) => ({
+        downloads: downloads || [], files: files || [], history: history || [], blocklist: blocklist || [], wanted: wanted || [],
         downloadRevision: state.downloadRevision + 1
       }))).catch((xhr) => {
         if (!xhr.aborted) {
@@ -106,8 +122,52 @@ class MangaDetailsPage extends Component {
     });
   };
 
+  onAddItem = () => {
+    const { id } = this.props.match.params;
+    const { newItemNumber } = this.state;
+    if (!newItemNumber.trim()) {
+      return;
+    }
+
+    this.setState({ isAddingItem: true, error: null });
+    this.addItemRequest = createAjaxRequest({
+      url: `/manga/${id}/items`, method: 'POST', dataType: 'json',
+      data: JSON.stringify({ numberText: newItemNumber.trim(), monitored: true })
+    });
+    this.addItemRequest.request.then((item) => {
+      this.setState((state) => ({ newItemNumber: '', isAddingItem: false, items: [...state.items, item] }));
+      this.onRefreshDownloads();
+    }).catch((xhr) => {
+      if (!xhr.aborted) {
+        this.setState({ isAddingItem: false, error: xhr.status === 409 ?
+          'This volume or chapter is already known.' : 'Could not add this manga item.' });
+      }
+    });
+  };
+
+  onToggleMonitor = (item) => {
+    const { id } = this.props.match.params;
+    this.monitorRequest?.abortRequest();
+    this.monitorRequest = createAjaxRequest({
+      url: `/manga/${id}/items/${item.itemId}/monitor`, method: 'PUT', dataType: 'json',
+      data: JSON.stringify({ monitored: !item.itemMonitored })
+    });
+    this.monitorRequest.request.then((updated) => {
+      this.setState((state) => ({
+        items: state.items.map((value) => (value.id === updated.id ? updated : value)),
+        wanted: state.wanted.map((value) => (value.itemId === updated.id ?
+          { ...value, itemMonitored: updated.monitored, monitored: state.manga.monitored && updated.monitored } : value))
+      }));
+    }).catch((xhr) => {
+      if (!xhr.aborted) {
+        this.setState({ error: 'Could not update monitoring for this manga item.' });
+      }
+    });
+  };
+
   render() {
-    const { manga, items, files, downloads, history, blocklist, downloadRevision, isLoading, isRefreshing, error } = this.state;
+    const { manga, items, wanted, files, downloads, history, blocklist, downloadRevision,
+      newItemNumber, isAddingItem, isLoading, isRefreshing, error } = this.state;
     const title = manga?.preferredTitle || manga?.titleRomaji || 'Manga';
 
     return (
@@ -156,8 +216,10 @@ class MangaDetailsPage extends Component {
                 </div>
               </div>
 
-              <MangaReleaseSearch manga={manga}
+              <MangaReleaseSearch key={this.props.location.search || 'all'}
+                manga={manga}
                 items={items}
+                initialItemId={new URLSearchParams(this.props.location.search).get('itemId') || ''}
                 onGrabbed={this.onGrabbed}
               />
 
@@ -221,11 +283,44 @@ class MangaDetailsPage extends Component {
 
               <section className={styles.section}>
                 <h2>{manga.trackingMode === 1 ? 'Chapters' : 'Volumes'}</h2>
-                {items.length === 0 ?
-                  <p className={styles.muted}>No known items yet.</p> :
+                <p className={styles.muted}>
+                  Completed AniList counts can create known items. Add an item yourself for unusual editions or extras.
+                </p>
+                <div className={styles.searchForm}>
+                  <input className={styles.input}
+                    type="text"
+                    value={newItemNumber}
+                    onChange={(event) => this.setState({ newItemNumber: event.target.value })}
+                    placeholder={manga.trackingMode === 1 ? 'Chapter number, e.g. 12.5' : 'Volume number, e.g. 11'}
+                    aria-label={manga.trackingMode === 1 ? 'New chapter number' : 'New volume number'}
+                  />
+                  <button className={styles.button}
+                    type="button"
+                    disabled={isAddingItem || !newItemNumber.trim()}
+                    onClick={this.onAddItem}
+                  >
+                    {isAddingItem ? 'Adding…' : `Add ${manga.trackingMode === 1 ? 'Chapter' : 'Volume'}`}
+                  </button>
+                </div>
+                {wanted.length === 0 ?
+                  <p className={styles.muted}>No known items yet. Add one here or refresh completed manga metadata.</p> :
                   <ul className={styles.list}>
-                    {items.map((item) => (
-                      <li key={item.id}>{item.type === 1 ? 'Chapter' : 'Volume'} {item.numberText}{item.title ? ` — ${item.title}` : ''}</li>
+                    {wanted.map((item) => (
+                      <li key={item.itemId}>
+                        {item.type === 1 ? 'Chapter' : 'Volume'} {item.numberText}
+                        {' · '}{wantedStatus(item)}
+                        {item.inProgress && !item.owned ? ' · In download client' : ''}
+                        {' · '}
+                        <button className={styles.button}
+                          type="button"
+                          onClick={() => this.onToggleMonitor(item)}
+                        >
+                          {item.itemMonitored ? 'Unmonitor' : 'Monitor'}
+                        </button>
+                        {!item.owned && item.monitored && (
+                          <Link to={`/manga/${manga.id}?itemId=${item.itemId}`}>Search Releases</Link>
+                        )}
+                      </li>
                     ))}
                   </ul>}
               </section>
@@ -247,7 +342,8 @@ class MangaDetailsPage extends Component {
 }
 
 MangaDetailsPage.propTypes = {
-  match: PropTypes.shape({ params: PropTypes.shape({ id: PropTypes.string.isRequired }).isRequired }).isRequired
+  match: PropTypes.shape({ params: PropTypes.shape({ id: PropTypes.string.isRequired }).isRequired }).isRequired,
+  location: PropTypes.shape({ search: PropTypes.string.isRequired }).isRequired
 };
 
 export default MangaDetailsPage;

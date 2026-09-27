@@ -96,10 +96,20 @@ namespace NzbDrone.Core.Manga
                 Added = DateTime.UtcNow
             };
             item.SetNumber(options.NumberText);
-            if (_items.GetByMangaId(mangaId).Any(existing => existing.Type == type &&
+            var existing = _items.GetByMangaId(mangaId).FirstOrDefault(existing => existing.Type == type &&
                 (string.Equals(existing.NumberText, item.NumberText, StringComparison.OrdinalIgnoreCase) ||
-                    (existing.NumberDecimal.HasValue && existing.NumberDecimal == item.NumberDecimal))))
+                    (existing.NumberDecimal.HasValue && existing.NumberDecimal == item.NumberDecimal)));
+            if (existing != null)
             {
+                if (existing.DiscoveredFrom == MangaItemDiscoverySource.Metadata &&
+                    !string.Equals(manga.Status, "FINISHED", StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.DiscoveredFrom = MangaItemDiscoverySource.Manual;
+                    existing.Monitored = options.Monitored;
+                    existing.Title = item.Title;
+                    return _items.Update(existing);
+                }
+
                 throw new InvalidOperationException("This manga item is already known.");
             }
 

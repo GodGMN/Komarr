@@ -17,6 +17,7 @@ import LibraryImportSelectFolderConnector from 'LibraryImport/LibraryImportSelec
 import MangaAddPage from 'Manga/MangaAddPage';
 import MangaDetailsPage from 'Manga/MangaDetailsPage';
 import MangaIndexPage from 'Manga/MangaIndexPage';
+import MangaWantedPage from 'Manga/MangaWantedPage';
 import NarratorDetailsPage from 'Narrator/NarratorDetailsPage';
 import AddNewItemConnector from 'Search/AddNewItemConnector';
 import CustomFormatSettingsConnector from 'Settings/CustomFormats/CustomFormatSettingsConnector';
@@ -93,6 +94,12 @@ function AppRoutes(props) {
         exact={true}
         path="/manga/add"
         component={MangaAddPage}
+      />
+
+      <Route
+        exact={true}
+        path="/manga/wanted"
+        component={MangaWantedPage}
       />
 
       <Route

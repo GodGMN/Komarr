@@ -1,0 +1,27 @@
+name: Manga release name
+description: Report a volume or chapter name Komarr parsed incorrectly.
+body:
+  - type: input
+    attributes:
+      label: Public release title
+      description: Use the exact title text, without download links or passkeys.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Expected manga and coverage
+      placeholder: Example Manga, volumes 03–04
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Komarr result
+      description: Include the parsed title, unit, number or range, confidence, and decision reason.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Why is this interpretation correct?
+      description: Explain any edition, language, scanlation group, or ambiguity that matters.
+    validations:
+      required: true

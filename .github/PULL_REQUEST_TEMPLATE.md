@@ -1,17 +1,15 @@
-#### Database Migration
-YES - XXXX | NO
+## Manga behavior
 
-#### Description
-A few sentences describing the overall goals of the pull request's commits.
+Describe what changes for manga lookup, release decisions, collection coverage, imports, or setup. Explain how ambiguous matches are handled.
 
-#### Screenshot (if UI related)
+## Verification
 
-#### Todos
-- [ ] Tests
-- [ ] Translation keys (`src/NzbDrone.Core/Localization/Core/en.json`)
-- [ ] Docs — `ARCHITECTURE.md`, `CHANGELOG.md`, or a per-folder `README.md`,
-      if this changes public behavior
+List the tests and smoke checks you ran. For UI changes, add a screenshot when it helps reviewers.
 
-#### Issues Fixed or Closed by this PR
+## Storage and compatibility
 
-* Fixes #XXXX
+Note database migrations, filesystem changes, seeding behavior, and Prowlarr or download-client compatibility if affected.
+
+## Related issue or task
+
+Link a GitHub issue if one exists. Maintainers track internal work in Runewire.

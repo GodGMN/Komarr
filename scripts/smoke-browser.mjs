@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import { chromium } from 'playwright';
 
 const baseUrl = process.argv[2];
@@ -6,7 +8,16 @@ assert.ok(baseUrl, 'Pass the running Komarr URL');
 
 const browser = await chromium.launch({ headless: true });
 try {
-  const page = await browser.newPage();
+  const screenshotDir = process.env.KOMARR_SCREENSHOT_DIR;
+  const page = await browser.newPage({ viewport: { width: 1280, height: screenshotDir ? 1600 : 720 } });
+  if (screenshotDir) {
+    await mkdir(screenshotDir, { recursive: true });
+  }
+  const saveScreenshot = async (name) => {
+    if (screenshotDir) {
+      await page.screenshot({ path: path.join(screenshotDir, name), fullPage: true });
+    }
+  };
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route(/\/api\/v1\/system\/status(?:\?|$)/, async route => {
@@ -56,6 +67,7 @@ try {
   await page.goto(`${baseUrl}/manga/setup`, { waitUntil: 'networkidle' });
   await page.getByText('Ready for local manga acquisition').waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /AniList is unavailable/);
+  await saveScreenshot('manga-setup.png');
   await page.route(/\/api\/v1\/manga\/library-scan$/, route => reply(route, {
     rootsScanned: 1,
     truncated: false,
@@ -115,6 +127,9 @@ try {
     return reply(route, savedItems);
   });
   await page.route(/\/api\/v1\/manga\/123\/wanted$/, route => reply(route, wantedItems));
+  await page.route(/\/api\/v1\/manga\/123\/files$/, route => reply(route, [
+    { id: 52, mangaId: 123, path: '/manga/BLAME!/BLAME! - v02.cbz' }
+  ]));
   await page.route(/\/api\/v1\/manga\/wanted\/page/, route => {
     const offset = new URL(route.request().url()).searchParams.get('offset');
     return reply(route, offset === '0' ? { items: wantedItems, nextOffset: 50 } : {
@@ -131,7 +146,6 @@ try {
       { ...item, monitored, itemMonitored: monitored } : item);
     return reply(route, savedItems[0]);
   });
-  await page.route(/\/api\/v1\/manga\/123\/files$/, route => reply(route, []));
   await page.route(/\/api\/v1\/manga\/123\/downloads$/, route => reply(route, [
     { id: 98, releaseTitle: 'BLAME! v02', downloadClient: 'qBittorrent', status: 2 }
   ]));
@@ -182,6 +196,7 @@ try {
   await page.getByRole('button', { name: 'Load More Manga' }).click();
   await page.getByText(/BLAME! · Volume 99/).waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /BLAME! · Volume 99/);
+  await saveScreenshot('manga-wanted.png');
   await page.getByRole('link', { name: 'Search Releases' }).first().click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
   assert.equal(await page.getByRole('combobox', { name: 'Manga item' }).inputValue(), '10');
@@ -190,6 +205,7 @@ try {
   assert.match(await page.locator('body').innerText(), /BLAME! v02.cbz · Imported/);
   assert.match(await page.locator('body').innerText(), /BLAME! 03.cbz · Manual review/);
   assert.match(await page.locator('body').innerText(), /Imported BLAME! - v02.cbz/);
+  await saveScreenshot('manga-detail.png');
   await page.getByRole('button', { name: 'Clear Blocklist Entry' }).click();
   await page.getByText('No failed releases are blocklisted.').waitFor({ timeout: 30000 });
   await page.getByRole('textbox', { name: 'New volume number' }).fill('11');

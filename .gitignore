@@ -224,6 +224,7 @@ scripts/.bench-cache/
 # and download paths get pointed at them. Never committable.
 docker-config/
 docker-books/
+docker-manga/
 docker-downloads/
 
 # Local smoke-test data dir. config.xml inside it was already caught by the

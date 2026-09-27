@@ -50,6 +50,7 @@ namespace NzbDrone.Core.Manga
         private readonly IMangaReleaseParser _parser;
         private readonly IMangaReleaseMatcher _matcher;
         private readonly IMangaReleaseDecisionEngine _decisions;
+        private readonly IMangaBlocklistService _blocklist;
 
         public MangaInteractiveSearchService(
             IMangaService manga,
@@ -57,7 +58,8 @@ namespace NzbDrone.Core.Manga
             IMangaIndexerSearchService indexers,
             IMangaReleaseParser parser,
             IMangaReleaseMatcher matcher,
-            IMangaReleaseDecisionEngine decisions)
+            IMangaReleaseDecisionEngine decisions,
+            IMangaBlocklistService blocklist)
         {
             _manga = manga;
             _fileItems = fileItems;
@@ -65,6 +67,7 @@ namespace NzbDrone.Core.Manga
             _parser = parser;
             _matcher = matcher;
             _decisions = decisions;
+            _blocklist = blocklist;
         }
 
         public async Task<MangaInteractiveSearchResult> Search(int mangaId, int? itemId = null)
@@ -105,6 +108,12 @@ namespace NzbDrone.Core.Manga
                         Evidence = parsed.Warnings.ToList()
                     }
                     : _decisions.Evaluate(manga, match, candidate, release, files, fileItems, requestedItemId: itemId);
+                if (_blocklist.IsBlocked(mangaId, release.IndexerId, release.Guid) &&
+                    !decision.Rejections.Contains("Release is blocklisted."))
+                {
+                    decision.Rejections.Add("Release is blocklisted after a failed download.");
+                }
+
                 result.Releases.Add(new MangaInteractiveRelease
                 {
                     Guid = release.Guid,

@@ -176,6 +176,37 @@ namespace NzbDrone.Core.Test.Manga
             Mocker.Resolve<MangaFileItemRepository>().GetByFileIds(new[] { libraryFile.Id }).Single().MangaItemId.Should().Be(volume.Id);
         }
 
+        [Test]
+        public void history_and_blocklist_survive_repository_reload_and_can_be_cleared()
+        {
+            var manga = Db.Insert(NewManga());
+            var download = Db.Insert(new MangaDownload
+            {
+                MangaId = manga.Id,
+                IndexerId = 5,
+                ReleaseGuid = "release-guid",
+                ReleaseTitle = "ONE PIECE v01",
+                DownloadClientId = 2,
+                DownloadClient = "qBittorrent",
+                Status = MangaDownloadStatus.Failed,
+                CoveredItemIds = new List<int> { 11 },
+                Added = DateTime.UtcNow
+            });
+            var history = new MangaHistoryService(Mocker.Resolve<MangaHistoryRepository>());
+            var blocklist = new MangaBlocklistService(Mocker.Resolve<MangaBlocklistRepository>());
+
+            history.Record(download, MangaHistoryEventType.DownloadFailed, "Download client reported a failure.");
+            blocklist.Block(download, "Download client reported a failure.");
+
+            var eventRecord = Mocker.Resolve<MangaHistoryRepository>().GetByMangaId(manga.Id).Single();
+            eventRecord.EventType.Should().Be(MangaHistoryEventType.DownloadFailed);
+            eventRecord.CoveredItemIds.Should().Equal(11);
+            blocklist.IsBlocked(manga.Id, 5, "release-guid").Should().BeTrue();
+            var entry = Mocker.Resolve<MangaBlocklistRepository>().GetByMangaId(manga.Id).Single();
+            blocklist.Unblock(manga.Id, entry.Id).Should().BeTrue();
+            blocklist.IsBlocked(manga.Id, 5, "release-guid").Should().BeFalse();
+        }
+
         private static MangaModel NewManga()
         {
             return new MangaModel

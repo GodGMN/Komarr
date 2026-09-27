@@ -21,6 +21,7 @@ namespace NzbDrone.Core.Manga
         private readonly IMangaDownloadFileRepository _downloadFiles;
         private readonly IDiskProvider _disk;
         private readonly IConfigService _config;
+        private readonly IMangaHistoryService _history;
         private readonly Logger _logger;
 
         public MangaImportService(
@@ -30,6 +31,7 @@ namespace NzbDrone.Core.Manga
             IMangaDownloadFileRepository downloadFiles,
             IDiskProvider disk,
             IConfigService config,
+            IMangaHistoryService history,
             Logger logger)
         {
             _manga = manga;
@@ -38,6 +40,7 @@ namespace NzbDrone.Core.Manga
             _downloadFiles = downloadFiles;
             _disk = disk;
             _config = config;
+            _history = history;
             _logger = logger;
         }
 
@@ -71,6 +74,12 @@ namespace NzbDrone.Core.Manga
                 catch (Exception ex)
                 {
                     _logger.Warn("Could not import manga download file {0}: {1}", file.Id, ex.GetType().Name);
+                    if (file.Reason != "Import failed; Komarr will retry this file.")
+                    {
+                        file.Reason = "Import failed; Komarr will retry this file.";
+                        _downloadFiles.Update(file);
+                        RecordHistory(download, MangaHistoryEventType.ImportFailed, file.Reason, file);
+                    }
                 }
             }
 
@@ -81,14 +90,14 @@ namespace NzbDrone.Core.Manga
         {
             if (!Inside(root, folder))
             {
-                NeedsReview(file, "The manga folder is outside its configured root folder.");
+                NeedsReview(download, file, "The manga folder is outside its configured root folder.");
                 return;
             }
 
             var items = _manga.GetItems(manga.Id).Where(item => file.CoveredItemIds.Contains(item.Id)).ToList();
             if (items.Count == 0 || items.Count != file.CoveredItemIds.Distinct().Count())
             {
-                NeedsReview(file, "File coverage no longer matches known manga items.");
+                NeedsReview(download, file, "File coverage no longer matches known manga items.");
                 return;
             }
 
@@ -98,7 +107,7 @@ namespace NzbDrone.Core.Manga
                 .ToHashSet();
             if (file.CoveredItemIds.Any(importedItemIds.Contains))
             {
-                NeedsReview(file, "An imported file already covers one of these manga items.");
+                NeedsReview(download, file, "An imported file already covers one of these manga items.");
                 return;
             }
 
@@ -111,13 +120,13 @@ namespace NzbDrone.Core.Manga
             var target = Path.GetFullPath(Path.Combine(folder, $"{title} - {unit}{range}{extension}"));
             if (!Inside(root, target) || !Inside(folder, target) || string.Equals(file.Path, target, StringComparison.OrdinalIgnoreCase))
             {
-                NeedsReview(file, "The destination path is unsafe or matches the source file.");
+                NeedsReview(download, file, "The destination path is unsafe or matches the source file.");
                 return;
             }
 
             if (_libraryFiles.FindByPath(target) != null || _disk.FileExists(target))
             {
-                NeedsReview(file, "A file already exists at the destination path.");
+                NeedsReview(download, file, "A file already exists at the destination path.");
                 return;
             }
 
@@ -175,6 +184,7 @@ namespace NzbDrone.Core.Manga
                 file.Status = MangaDownloadFileStatus.Imported;
                 file.Reason = null;
                 _downloadFiles.Update(file);
+                RecordHistory(download, MangaHistoryEventType.Imported, $"Imported {Path.GetFileName(target)}.", file);
             }
             catch
             {
@@ -192,11 +202,24 @@ namespace NzbDrone.Core.Manga
             }
         }
 
-        private void NeedsReview(MangaDownloadFile file, string reason)
+        private void NeedsReview(MangaDownload download, MangaDownloadFile file, string reason)
         {
             file.Status = MangaDownloadFileStatus.ManualReview;
             file.Reason = reason;
             _downloadFiles.Update(file);
+            RecordHistory(download, MangaHistoryEventType.NeedsReview, reason, file);
+        }
+
+        private void RecordHistory(MangaDownload download, MangaHistoryEventType eventType, string message, MangaDownloadFile file)
+        {
+            try
+            {
+                _history.Record(download, eventType, message, file);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("Could not record manga import history for file {0}: {1}", file.Id, ex.GetType().Name);
+            }
         }
 
         private static string NumberLabel(MangaItem item, MangaTrackingMode mode)

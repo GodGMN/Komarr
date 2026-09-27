@@ -39,13 +39,15 @@ namespace NzbDrone.Core.Test.Manga
                     NewRelease("BLAME! v02 [Japanese]")
                 }
             });
+            var blocklist = new Mock<IMangaBlocklistService>();
             var service = new MangaInteractiveSearchService(
                 mangaService.Object,
                 fileItems.Object,
                 indexers.Object,
                 new MangaReleaseParser(),
                 new MangaReleaseMatcher(),
-                new MangaReleaseDecisionEngine());
+                new MangaReleaseDecisionEngine(),
+                blocklist.Object);
 
             var result = await service.Search(7, 10);
 
@@ -58,6 +60,10 @@ namespace NzbDrone.Core.Test.Manga
             result.Releases[1].Decision.Rejections.Should().Contain(x => x.Contains("does not match"));
             result.Releases[2].Decision.Rejections.Should().Contain(x => x.Contains("requested item"));
             result.Releases[2].Decision.Rejections.Should().Contain(x => x.Contains("language 'Japanese'"));
+
+            blocklist.Setup(value => value.IsBlocked(7, 0, "BLAME! v01 [English] (Digital)")).Returns(true);
+            var blocked = await service.Search(7, 10);
+            blocked.Releases[0].Decision.Rejections.Should().Contain(x => x.Contains("blocklisted"));
         }
 
         [Test]
@@ -74,7 +80,8 @@ namespace NzbDrone.Core.Test.Manga
                 indexers.Object,
                 new MangaReleaseParser(),
                 new MangaReleaseMatcher(),
-                new MangaReleaseDecisionEngine());
+                new MangaReleaseDecisionEngine(),
+                new Mock<IMangaBlocklistService>().Object);
 
             var action = () => service.Search(7, 999);
 

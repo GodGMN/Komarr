@@ -52,6 +52,8 @@ namespace NzbDrone.Core.Manga
         private readonly IMangaService _manga;
         private readonly IMangaFileItemRepository _fileItems;
         private readonly IMangaDownloadRepository _downloads;
+        private readonly IMangaHistoryService _history;
+        private readonly IMangaBlocklistService _blocklist;
         private readonly IMangaIndexerSearchService _indexers;
         private readonly IMangaReleaseParser _parser;
         private readonly IMangaReleaseMatcher _matcher;
@@ -66,6 +68,8 @@ namespace NzbDrone.Core.Manga
             IMangaService manga,
             IMangaFileItemRepository fileItems,
             IMangaDownloadRepository downloads,
+            IMangaHistoryService history,
+            IMangaBlocklistService blocklist,
             IMangaIndexerSearchService indexers,
             IMangaReleaseParser parser,
             IMangaReleaseMatcher matcher,
@@ -79,6 +83,8 @@ namespace NzbDrone.Core.Manga
             _manga = manga;
             _fileItems = fileItems;
             _downloads = downloads;
+            _history = history;
+            _blocklist = blocklist;
             _indexers = indexers;
             _parser = parser;
             _matcher = matcher;
@@ -121,6 +127,11 @@ namespace NzbDrone.Core.Manga
             if (release == null)
             {
                 throw new MangaGrabValidationException("Selected release is no longer available from this indexer. Search again.");
+            }
+
+            if (_blocklist.IsBlocked(mangaId, release.IndexerId, release.Guid))
+            {
+                throw new MangaGrabValidationException("This release is blocklisted after a failed download. Clear its blocklist entry before retrying.");
             }
 
             var parsed = _parser.Parse(release.Title);
@@ -198,6 +209,7 @@ namespace NzbDrone.Core.Manga
                 download.Error = "Download client rejected or could not fetch this release.";
                 download.LastUpdated = DateTime.UtcNow;
                 _downloads.Update(download);
+                RecordHistory(download, MangaHistoryEventType.GrabFailed, download.Error);
                 _clientStatus.RecordFailure(client.Definition.Id);
                 _logger.Warn("Manual manga grab failed on client {0}: {1}", client.Definition.Name, ex.GetType().Name);
                 throw;
@@ -207,9 +219,22 @@ namespace NzbDrone.Core.Manga
             download.Status = MangaDownloadStatus.Sent;
             download.LastUpdated = DateTime.UtcNow;
             download = _downloads.Update(download);
+            RecordHistory(download, MangaHistoryEventType.Grabbed, $"Sent to {download.DownloadClient}.");
             _clientStatus.RecordSuccess(client.Definition.Id);
             _events.PublishEvent(new MangaGrabbedEvent(download));
             return download;
+        }
+
+        private void RecordHistory(MangaDownload download, MangaHistoryEventType eventType, string message)
+        {
+            try
+            {
+                _history.Record(download, eventType, message);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("Could not record manga history for download {0}: {1}", download.Id, ex.GetType().Name);
+            }
         }
     }
 }

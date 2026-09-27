@@ -1,0 +1,10 @@
+.body {
+  padding: 16px 4px;
+}
+
+.running {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 24px 0;
+}

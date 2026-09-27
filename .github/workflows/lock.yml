@@ -1,0 +1,35 @@
+name: 'Lock threads'
+
+on:
+  workflow_dispatch:
+
+# Required. Without this block the job runs with the repository's default
+# token scopes, which are read-only here, so every lock attempt would 403.
+# That was masked for as long as the run died during input validation and
+# never reached the API.
+permissions:
+  issues: write
+  pull-requests: write
+  discussions: write
+
+concurrency:
+  group: lock-threads
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      # v4 validated github-token against a max length of 100 characters.
+      # GitHub's automatic token outgrew that, so every scheduled run
+      # failed during input validation with `"github-token" length must be
+      # less than or equal to 100 characters long` without doing any work.
+      # v6 raised the bound to 1000 and moved to the node24 runtime, which
+      # also clears the Node 20 deprecation warning the old pin emitted.
+      #
+      # github-token is not passed: it defaults to ${{ github.token }}.
+      # The remaining inputs the old file listed were all empty strings,
+      # i.e. the action's own defaults spelled out.
+      - uses: dessant/lock-threads@v6
+        with:
+          issue-inactive-days: '90'
+          issue-lock-reason: 'resolved'

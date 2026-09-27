@@ -1,0 +1,44 @@
+.description {
+  margin-bottom: 20px;
+  color: var(--helpTextColor);
+}
+
+.rootFolders {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.rootFolder {
+  composes: link from '~Components/Link/Link.css';
+
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  margin: 0 10px 10px 0;
+  padding: 20px;
+  min-width: 300px;
+  border: 1px solid var(--borderColor);
+  border-radius: 4px;
+  background-color: var(--cardCenterBackgroundColor);
+  color: var(--textColor);
+}
+
+.rootFolder:hover {
+  border-color: var(--themeDarkColor);
+}
+
+.path {
+  word-break: break-all;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.unmappedCount {
+  margin-top: 5px;
+  color: var(--helpTextColor);
+  font-size: 12px;
+}
+
+.addRootFolder {
+  margin-top: 20px;
+}

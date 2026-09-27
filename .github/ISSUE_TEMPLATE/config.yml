@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, setup help, and general discussion
+    url: https://github.com/Rorqualx/Librarr/discussions
+    about: >-
+      Librarr has no Discord. This used to point at readarr.com/discord,
+      which belongs to a project archived in 2025. Use Discussions instead.

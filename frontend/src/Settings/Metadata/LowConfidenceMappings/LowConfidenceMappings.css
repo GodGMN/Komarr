@@ -1,0 +1,40 @@
+.body {
+  padding: 16px 4px;
+}
+
+.empty {
+  padding: 16px 0;
+  color: var(--disabledColor);
+  font-style: italic;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--borderColor);
+  vertical-align: middle;
+  text-align: left;
+}
+
+.confidenceLow {
+  color: var(--dangerColor);
+  font-weight: 600;
+}
+
+.confidenceMid {
+  color: var(--warningColor);
+  font-weight: 600;
+}
+
+.olInput {
+  width: 160px;
+}
+
+.actionCell {
+  white-space: nowrap;
+}

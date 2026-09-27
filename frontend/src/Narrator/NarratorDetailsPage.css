@@ -1,0 +1,50 @@
+.header {
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.name {
+  margin: 0;
+  font-weight: 300;
+  font-size: 28px;
+}
+
+.count {
+  margin-top: 4px;
+  color: #888;
+  font-size: 14px;
+}
+
+.empty {
+  margin: 40px 0;
+  color: #888;
+  text-align: center;
+}
+
+.error {
+  margin: 40px 0;
+  color: #b71c1c;
+  text-align: center;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.bookLink {
+  font-size: 16px;
+}
+
+.authorRow {
+  margin-top: 2px;
+  color: #666;
+  font-size: 13px;
+}

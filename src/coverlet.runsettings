@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>opencover</Format>
+          <Exclude>[Readarr.*.Test]*,[Readarr.Test.*]*,[Readarr.Api.V1]*</Exclude>
+          <!--
+            Coverage baseline gate (Librarr Phase 8).
+
+            Threshold remains 0 — but the meaning has shifted from "we
+            haven't measured yet" (Phase 1) to "the per-test-assembly
+            check can't be raised without aggregation".
+
+            Coverlet's `XPlat Code Coverage` data collector writes one
+            OpenCover XML per test-process. The Threshold gate is then
+            evaluated PER XML, not on the merged report. So as long as
+            any single test assembly (e.g., Readarr.Mono.Test) exercises
+            zero lines of the included modules, its XML reports 0% and
+            a global threshold >0 fails the whole run.
+
+            To actually gate on a non-zero number, CI needs to:
+              1. Run all assemblies in one process (the single-process
+                 vstest flag), producing a single merged XML; OR
+              2. Add a reportgenerator step that merges per-XML reports
+                 and asserts on the aggregate (see
+                 azure-pipelines.yml:1224 for the pattern).
+
+            Phase 8 closeout upgraded the collector + fixed the runner
+            so coverage data is actually produced now (was 0% / 0 modules
+            on coverlet.collector 3.0.4-preview). Aggregation + a real
+            threshold bump are tracked as a follow-up.
+          -->
+          <Threshold>0</Threshold>
+          <ThresholdType>line</ThresholdType>
+          <ThresholdStat>total</ThresholdStat>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+  <InProcDataCollectionRunSettings>
+    <InProcDataCollectors>
+      <InProcDataCollector assemblyQualifiedName="Coverlet.Collector.DataCollection.CoverletInProcDataCollector, coverlet.collector, Version=1.1.0.0, Culture=neutral, PublicKeyToken=null"
+                           friendlyName="XPlat Code Coverage"
+                           enabled="True"
+                           codebase="coverlet.collector.dll" />
+    </InProcDataCollectors>
+  </InProcDataCollectionRunSettings>
+</RunSettings>

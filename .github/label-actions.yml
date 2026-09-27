@@ -1,0 +1,20 @@
+# Configuration for Label Actions - https://github.com/dessant/label-actions
+
+'Type: Support':
+  comment: >
+    :wave: @{issue-author}, we use the issue tracker for bug reports and
+    feature requests. This looks like a support request, so
+    [Discussions](https://github.com/Rorqualx/Librarr/discussions) is a
+    better place for it — Librarr is maintained by one person, and
+    keeping the two separate is what makes the bug list readable.
+  close: true
+  close-reason: 'not planned'
+
+'Status: Logs Needed':
+  comment: >
+    :wave: @{issue-author}, to help further we'll need logs. Enable trace
+    logging, reproduce the problem, and attach the log. Upstream Readarr's
+    [troubleshooting guide](https://wiki.servarr.com/readarr/troubleshooting#logging-and-log-files)
+    still describes the logging settings accurately — that part of the app
+    is unchanged in the fork — but treat anything it says about metadata
+    sources as obsolete.

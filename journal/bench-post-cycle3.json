@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-05-19T06:01:26.892370+00:00",
+  "author_id": 9,
+  "total_books": 249,
+  "fields": {
+    "cover_on_disk": {
+      "actual": 190,
+      "ceiling": 200,
+      "delta": -10
+    },
+    "description": {
+      "actual": 65,
+      "ceiling": 149,
+      "delta": -84
+    },
+    "release_date": {
+      "actual": 226,
+      "ceiling": 243,
+      "delta": -17
+    },
+    "page_count": {
+      "actual": 195,
+      "ceiling": 208,
+      "delta": -13
+    },
+    "publisher": {
+      "actual": 241,
+      "ceiling": 241,
+      "delta": 0
+    },
+    "isbn_13": {
+      "actual": 191,
+      "ceiling": 208,
+      "delta": -17
+    },
+    "genres": {
+      "actual": 169,
+      "ceiling": 169,
+      "delta": 0
+    },
+    "format": {
+      "actual": 128,
+      "ceiling": 158,
+      "delta": -30
+    },
+    "rating": {
+      "actual": 0,
+      "ceiling": 0,
+      "delta": 0
+    },
+    "language": {
+      "actual": 241,
+      "ceiling": 244,
+      "delta": -3
+    }
+  },
+  "overall_mean_actual": 0.661,
+  "overall_mean_ceiling": 0.7309
+}

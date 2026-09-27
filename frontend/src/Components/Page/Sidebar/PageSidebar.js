@@ -20,34 +20,18 @@ const SIDEBAR_WIDTH = parseInt(dimensions.sidebarWidth);
 
 const links = [
   {
-    iconName: icons.AUTHOR_CONTINUING,
-    title: () => translate('Library'),
-    to: '/',
-    alias: '/authors',
+    iconName: icons.BOOK,
+    title: () => 'Manga',
+    to: '/manga',
+    alias: '/',
     children: [
       {
-        title: () => translate('Authors'),
-        to: '/authors'
+        title: () => 'Manga Library',
+        to: '/manga'
       },
       {
-        title: () => translate('Books'),
-        to: '/books'
-      },
-      {
-        title: () => translate('AddNew'),
-        to: '/add/search'
-      },
-      {
-        title: () => translate('LibraryImport'),
-        to: '/add/import'
-      },
-      {
-        title: () => translate('Bookshelf'),
-        to: '/shelf'
-      },
-      {
-        title: () => translate('UnmappedFiles'),
-        to: '/unmapped'
+        title: () => 'Add Manga',
+        to: '/manga/add'
       }
     ]
   },

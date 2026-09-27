@@ -40,4 +40,22 @@ namespace NzbDrone.Core.Manga
             return Query(x => x.MangaId == mangaId);
         }
     }
+
+    public interface IMangaFileRepository : IBasicRepository<MangaFile>
+    {
+        IEnumerable<MangaFile> GetByMangaId(int mangaId);
+    }
+
+    public class MangaFileRepository : BasicRepository<MangaFile>, IMangaFileRepository
+    {
+        public MangaFileRepository(IMainDatabase database, IEventAggregator eventAggregator)
+            : base(database, eventAggregator)
+        {
+        }
+
+        public IEnumerable<MangaFile> GetByMangaId(int mangaId)
+        {
+            return Query(x => x.MangaId == mangaId);
+        }
+    }
 }

@@ -24,6 +24,8 @@ namespace NzbDrone.Core.Test.Manga
             stored.TrackingMode.Should().Be(MangaTrackingMode.Volume);
             stored.Tags.Should().BeEquivalentTo(new[] { 2, 5 });
             stored.UserAliases.Should().Contain("OP");
+            stored.QualityPolicy.AllowedLanguages.Should().Contain("English");
+            stored.QualityPolicy.MinimumSeeders.Should().Be(2);
         }
 
         [Test]
@@ -66,6 +68,9 @@ namespace NzbDrone.Core.Test.Manga
             Db.All<MangaFileItem>().Where(coverage => coverage.MangaFileId == file.Id)
               .Select(coverage => coverage.MangaItemId)
               .Should().BeEquivalentTo(volumes.Select(volume => volume.Id));
+            Mocker.Resolve<MangaFileItemRepository>().GetByFileIds(new[] { file.Id })
+                  .Select(coverage => coverage.MangaItemId)
+                  .Should().BeEquivalentTo(volumes.Select(volume => volume.Id));
             Db.Single<MangaFile>().EditionLabel.Should().Be("Omnibus");
         }
 
@@ -79,6 +84,11 @@ namespace NzbDrone.Core.Test.Manga
                 CleanTitle = "one piece",
                 Synonyms = new List<string> { "One Piece" },
                 UserAliases = new List<string> { "OP" },
+                QualityPolicy = new MangaReleasePolicy
+                {
+                    AllowedLanguages = new List<string> { "English" },
+                    MinimumSeeders = 2
+                },
                 Tags = new List<int> { 2, 5 },
                 TrackingMode = MangaTrackingMode.Volume,
                 Monitored = true,

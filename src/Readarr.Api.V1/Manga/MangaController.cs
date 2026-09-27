@@ -62,6 +62,12 @@ namespace Readarr.Api.V1.Manga
             return _wanted.GetMissing();
         }
 
+        [HttpGet("wanted/page")]
+        public MangaWantedPageResult GetWantedPage([FromQuery] int offset = 0, [FromQuery] int limit = 50)
+        {
+            return _wanted.GetMissingPage(offset, limit);
+        }
+
         [HttpGet("library-scan")]
         public MangaLibraryScanResult ScanLibrary()
         {

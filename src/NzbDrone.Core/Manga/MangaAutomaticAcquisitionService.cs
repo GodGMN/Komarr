@@ -46,13 +46,37 @@ namespace NzbDrone.Core.Manga
 
         private async Task SearchMissing()
         {
-            var missingIds = _wanted.GetMissing().Where(item => !item.InProgress)
-                .Select(item => item.MangaId).ToHashSet();
-            var selected = _manga.All().Where(manga => manga.Monitored && missingIds.Contains(manga.Id))
+            var candidates = _manga.All().Where(manga => manga.Monitored)
                 .OrderBy(manga => manga.LastSearchTime ?? DateTime.MinValue)
                 .ThenBy(manga => manga.Id)
-                .Take(5)
+                .Take(100)
                 .ToList();
+            var selected = new List<Manga>();
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    if (_wanted.GetForManga(candidate.Id).Any(item => item.Missing && !item.InProgress))
+                    {
+                        selected.Add(candidate);
+                    }
+                    else
+                    {
+                        _manga.MarkSearched(candidate.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn("Could not check wanted manga {0}: {1}", candidate.Id, ex.GetType().Name);
+                    _manga.MarkSearched(candidate.Id);
+                }
+
+                if (selected.Count == 5)
+                {
+                    break;
+                }
+            }
+
             foreach (var manga in selected)
             {
                 try
@@ -125,7 +149,8 @@ namespace NzbDrone.Core.Manga
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warn("Skipped manga {0} from {1}: {2} ({3})", evaluation.Release.Title, source, ex.Message, manga.PreferredTitle);
+                    var failureReason = ex is MangaGrabValidationException ? ex.Message : ex.GetType().Name;
+                    _logger.Warn("Skipped manga {0} from {1}: {2} ({3})", evaluation.Release.Title, source, failureReason, manga.PreferredTitle);
                 }
             }
         }

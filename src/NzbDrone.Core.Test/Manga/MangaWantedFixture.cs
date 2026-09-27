@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using FluentAssertions;
 using Moq;
@@ -102,6 +103,43 @@ namespace NzbDrone.Core.Test.Manga
 
             service.GetForManga(7).Select(item => item.NumberText).Should().Equal("2");
             service.GetMissing().Select(item => item.NumberText).Should().Equal("2");
+        }
+
+        [Test]
+        public void Wanted_page_only_reads_the_requested_fifty_titles()
+        {
+            var manga = Enumerable.Range(1, 10000).Select(id => new MangaModel
+            {
+                Id = id, PreferredTitle = $"Title {id:D3}", Status = "FINISHED", Monitored = true,
+                TrackingMode = MangaTrackingMode.Volume
+            }).ToList();
+            var titles = new Mock<IMangaService>();
+            titles.Setup(value => value.All()).Returns(manga);
+            titles.Setup(value => value.GetItems(It.IsAny<int>())).Returns((int id) =>
+                Enumerable.Range(1, 10).Select(number => new MangaItem
+                {
+                    Id = (id * 10) + number, MangaId = id, Type = MangaItemType.Volume,
+                    Monitored = true, NumberText = number.ToString()
+                }));
+            titles.Setup(value => value.GetFiles(It.IsAny<int>())).Returns(new MangaFile[0]);
+            var coverage = new Mock<IMangaFileItemRepository>();
+            coverage.Setup(value => value.GetByFileIds(It.IsAny<IEnumerable<int>>())).Returns(new MangaFileItem[0]);
+            var downloads = new Mock<IMangaDownloadRepository>();
+            downloads.Setup(value => value.GetByMangaId(It.IsAny<int>())).Returns(new MangaDownload[0]);
+            var service = new MangaWantedService(titles.Object, coverage.Object, downloads.Object);
+
+            var watch = Stopwatch.StartNew();
+            var first = service.GetMissingPage(0, 1000);
+            var second = service.GetMissingPage(first.NextOffset.Value, 50);
+            watch.Stop();
+            TestContext.Progress.WriteLine($"Wanted profile: 10,000 manga, 100,000 items, two pages: {watch.ElapsedMilliseconds} ms");
+
+            first.Items.Should().HaveCount(500);
+            first.NextOffset.Should().Be(50);
+            second.Items.Should().HaveCount(500);
+            second.NextOffset.Should().Be(100);
+            titles.Verify(value => value.GetItems(It.IsAny<int>()), Times.Exactly(100));
+            titles.Verify(value => value.GetItems(10000), Times.Never());
         }
     }
 }

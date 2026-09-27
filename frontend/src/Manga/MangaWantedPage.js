@@ -10,31 +10,49 @@ class MangaWantedPage extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { items: [], isLoading: true, error: null };
+    this.state = { items: [], nextOffset: 0, isLoading: false, error: null };
   }
 
   componentDidMount() {
-    this.request = createAjaxRequest({ url: '/manga/wanted', method: 'GET', dataType: 'json' });
-    this.request.request.then((items) => this.setState({ items: items || [], isLoading: false })).catch((xhr) => {
-      if (!xhr.aborted) {
-        this.setState({ error: 'Could not load missing manga items.', isLoading: false });
-      }
-    });
+    this.onLoadMore();
   }
 
   componentWillUnmount() {
     this.request?.abortRequest();
   }
 
+  onLoadMore = () => {
+    const { nextOffset, isLoading } = this.state;
+    if (nextOffset === null || isLoading) {
+      return;
+    }
+
+    this.setState({ isLoading: true, error: null });
+    this.request = createAjaxRequest({
+      url: `/manga/wanted/page?offset=${nextOffset}&limit=50`,
+      method: 'GET',
+      dataType: 'json'
+    });
+    this.request.request.then((page) => this.setState((state) => ({
+      items: [...state.items, ...(page.items || [])],
+      nextOffset: page.nextOffset,
+      isLoading: false
+    }))).catch((xhr) => {
+      if (!xhr.aborted) {
+        this.setState({ error: 'Could not load missing manga items.', isLoading: false });
+      }
+    });
+  };
+
   render() {
-    const { items, isLoading, error } = this.state;
+    const { items, nextOffset, isLoading, error } = this.state;
     return (
       <PageContent title="Missing Manga">
         <PageContentBody>
           <p className={styles.intro}>Known, monitored volumes and chapters without imported files.</p>
           {isLoading && <LoadingIndicator />}
           {error && <div className={styles.error}>{error}</div>}
-          {!isLoading && !error && items.length === 0 && (
+          {!isLoading && !error && items.length === 0 && nextOffset === null && (
             <p className={styles.muted}>No known manga items are missing.</p>
           )}
           {items.length > 0 && (
@@ -49,6 +67,15 @@ class MangaWantedPage extends Component {
                 </li>
               ))}
             </ul>
+          )}
+          {nextOffset !== null && !isLoading && (
+            <button
+              className={styles.button}
+              type="button"
+              onClick={this.onLoadMore}
+            >
+              Load More Manga
+            </button>
           )}
         </PageContentBody>
       </PageContent>

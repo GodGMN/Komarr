@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Backup;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.MetadataSource.AniList;
@@ -43,6 +45,7 @@ namespace NzbDrone.Core.Manga
         private readonly IAniListMetadataClient _anilist;
         private readonly IBackupService _backups;
         private readonly IDiskProvider _disk;
+        private readonly IConfigFileProvider _config;
 
         public MangaSetupStatusService(
             IMangaRepository database,
@@ -52,7 +55,8 @@ namespace NzbDrone.Core.Manga
             IRemotePathMappingService remotePaths,
             IAniListMetadataClient anilist,
             IBackupService backups,
-            IDiskProvider disk)
+            IDiskProvider disk,
+            IConfigFileProvider config)
         {
             _database = database;
             _roots = roots;
@@ -62,6 +66,7 @@ namespace NzbDrone.Core.Manga
             _anilist = anilist;
             _backups = backups;
             _disk = disk;
+            _config = config;
         }
 
         public MangaSetupStatus GetStatus()
@@ -75,6 +80,7 @@ namespace NzbDrone.Core.Manga
             CheckRemotePaths(status);
             CheckAniList(status);
             CheckBackups(status);
+            CheckAuthentication(status);
             status.ReadyForLocalUse = status.Checks
                 .Where(check => check.Key is "database" or "roots" or "disk" or "indexers" or "clients" or "remotePaths")
                 .All(check => check.State == "ready" || check.State == "warning");
@@ -241,6 +247,20 @@ namespace NzbDrone.Core.Manga
             catch (Exception)
             {
                 Add(status, "backups", "Database and config backups", "warning", "Backups could not be listed.", "/system/backup");
+            }
+        }
+
+        private void CheckAuthentication(MangaSetupStatus status)
+        {
+            try
+            {
+                var enabled = _config.AuthenticationMethod != AuthenticationType.None;
+                var message = enabled ? "UI authentication is enabled." : "UI authentication is disabled. Set a username and password before exposing Komarr beyond a trusted network.";
+                Add(status, "authentication", "UI authentication", enabled ? "ready" : "warning", message, "/settings/general");
+            }
+            catch (Exception)
+            {
+                Add(status, "authentication", "UI authentication", "warning", "Authentication settings could not be checked.", "/settings/general");
             }
         }
 

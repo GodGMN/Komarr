@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -93,6 +94,48 @@ namespace NzbDrone.Core.Test.Manga
             result.Evaluations.Single().Decision.Rejections.Should().Contain(value => value.Contains("blocklisted"));
         }
 
+        [Test]
+        public void Matching_one_title_reads_only_its_items_files_and_blocklist()
+        {
+            var titles = new Mock<IMangaRepository>();
+            titles.Setup(value => value.All()).Returns(Enumerable.Range(1, 10000).Select(id => NewManga(id, $"Title {id}")));
+            var items = new Mock<IMangaItemRepository>();
+            items.Setup(value => value.All()).Returns(Enumerable.Range(1, 100000).Select(id => new MangaItem { Id = id, MangaId = (id / 10) + 1 }));
+            items.Setup(value => value.GetByMangaId(1)).Returns(new[] { NewItem(1, 1) });
+            var files = new Mock<IMangaFileRepository>();
+            files.Setup(value => value.All()).Returns(Enumerable.Range(1, 100000).Select(id => new MangaFile { Id = id, MangaId = (id / 10) + 1 }));
+            files.Setup(value => value.GetByMangaId(1)).Returns(new MangaFile[0]);
+            var links = new Mock<IMangaFileItemRepository>();
+            links.Setup(value => value.GetByFileIds(It.IsAny<IEnumerable<int>>())).Returns(new MangaFileItem[0]);
+            var blocklist = new Mock<IMangaBlocklistRepository>();
+            blocklist.Setup(value => value.GetByMangaId(1)).Returns(new MangaBlocklist[0]);
+            var service = new MangaRssSyncService(
+                titles.Object,
+                items.Object,
+                files.Object,
+                links.Object,
+                blocklist.Object,
+                new MangaReleaseParser(),
+                new MangaReleaseMatcher(),
+                new MangaReleaseDecisionEngine(),
+                LogManager.GetCurrentClassLogger());
+
+            var watch = Stopwatch.StartNew();
+            var result = service.Process(Enumerable.Range(1, 100).Select(id => NewRelease("Title 1 v01", $"guid-{id}")));
+            watch.Stop();
+            TestContext.Progress.WriteLine($"RSS profile: 10,000 manga, 100,000 items, 100,000 files, 100 reports: {watch.ElapsedMilliseconds} ms");
+
+            result.Matched.Should().Be(100);
+            items.Verify(value => value.All(), Times.Never());
+            files.Verify(value => value.All(), Times.Never());
+            links.Verify(value => value.All(), Times.Never());
+            blocklist.Verify(value => value.All(), Times.Never());
+            items.Verify(value => value.GetByMangaId(1), Times.Once());
+            files.Verify(value => value.GetByMangaId(1), Times.Once());
+            links.Verify(value => value.GetByFileIds(It.IsAny<IEnumerable<int>>()), Times.Once());
+            blocklist.Verify(value => value.GetByMangaId(1), Times.Once());
+        }
+
         private static MangaRssSyncService NewService(
             IEnumerable<MangaModel> manga,
             IEnumerable<MangaItem> items,
@@ -101,13 +144,15 @@ namespace NzbDrone.Core.Test.Manga
             var titles = new Mock<IMangaRepository>();
             titles.Setup(value => value.All()).Returns(manga);
             var knownItems = new Mock<IMangaItemRepository>();
-            knownItems.Setup(value => value.All()).Returns(items);
+            knownItems.Setup(value => value.GetByMangaId(It.IsAny<int>()))
+                .Returns((int mangaId) => items.Where(item => item.MangaId == mangaId));
             var files = new Mock<IMangaFileRepository>();
-            files.Setup(value => value.All()).Returns(new MangaFile[0]);
+            files.Setup(value => value.GetByMangaId(It.IsAny<int>())).Returns(new MangaFile[0]);
             var links = new Mock<IMangaFileItemRepository>();
-            links.Setup(value => value.All()).Returns(new MangaFileItem[0]);
+            links.Setup(value => value.GetByFileIds(It.IsAny<IEnumerable<int>>())).Returns(new MangaFileItem[0]);
             var blocklist = new Mock<IMangaBlocklistRepository>();
-            blocklist.Setup(value => value.All()).Returns(blocked ?? new MangaBlocklist[0]);
+            blocklist.Setup(value => value.GetByMangaId(It.IsAny<int>()))
+                .Returns((int mangaId) => (blocked ?? new MangaBlocklist[0]).Where(item => item.MangaId == mangaId));
             return new MangaRssSyncService(
                 titles.Object,
                 knownItems.Object,

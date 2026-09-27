@@ -170,6 +170,7 @@ class MangaLibraryScanPage extends Component {
                       <> · Possible match: <Link to={`/manga/${folder.suggestedMangaId}`}>{folder.suggestedTitle}</Link> (review required)</> :
                       ' · No confident local title suggestion'}</p>}
                   {folder.truncated && <p className={styles.muted}>Folder file limit reached; more files may exist.</p>}
+                  {(folder.warnings || []).map((warning) => <p key={warning} className={styles.error}>{warning}</p>)}
                   <p>{folder.files.length} supported archive{folder.files.length === 1 ? '' : 's'} sampled</p>
                   <ul className={styles.list}>
                     {folder.files.slice(0, 20).map((file) => (

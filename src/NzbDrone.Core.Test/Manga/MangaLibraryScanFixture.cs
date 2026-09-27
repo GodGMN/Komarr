@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using FluentAssertions;
 using Moq;
@@ -90,6 +92,82 @@ namespace NzbDrone.Core.Test.Manga
 
             action.Should().Throw<KeyNotFoundException>();
             disk.Verify(value => value.GetFiles(It.IsAny<string>(), false), Times.Never());
+        }
+
+        [Test]
+        public void Symlinked_folder_outside_root_cannot_be_scanned_or_mapped()
+        {
+            var temporary = Path.Combine(Path.GetTempPath(), $"komarr-scan-{Guid.NewGuid():N}");
+            var root = Path.Combine(temporary, "library");
+            var outside = Path.Combine(temporary, "outside");
+            Directory.CreateDirectory(root);
+            Directory.CreateDirectory(outside);
+            try
+            {
+                var link = Path.Combine(root, "Outside");
+                Directory.CreateSymbolicLink(link, outside);
+                var disk = NewDisk();
+                disk.Setup(value => value.FolderExists(root)).Returns(true);
+                disk.Setup(value => value.FolderExists(link)).Returns(true);
+                disk.Setup(value => value.GetDirectories(root)).Returns(new[] { link });
+                var roots = new Mock<IRootFolderService>();
+                roots.Setup(value => value.All()).Returns(new List<RootFolder> { new RootFolder { Path = root } });
+                var manga = new Mock<IMangaService>();
+                manga.Setup(value => value.All()).Returns(new MangaModel[0]);
+                var service = new MangaLibraryScanService(
+                    roots.Object,
+                    manga.Object,
+                    new MangaReleaseParser(),
+                    disk.Object,
+                    LogManager.GetCurrentClassLogger());
+
+                service.Scan().Errors.Should().ContainSingle(value => value.Contains("outside its configured root"));
+                Action preview = () => service.ScanFolder(link);
+                preview.Should().Throw<ArgumentException>();
+                disk.Verify(value => value.GetFiles(link, false), Times.Never());
+            }
+            finally
+            {
+                Directory.Delete(temporary, true);
+            }
+        }
+
+        [Test]
+        public void Linked_archive_outside_root_is_skipped_with_a_reason()
+        {
+            var temporary = Path.Combine(Path.GetTempPath(), $"komarr-file-{Guid.NewGuid():N}");
+            var root = Path.Combine(temporary, "library");
+            var folder = Path.Combine(root, "BLAME!");
+            var outside = Path.Combine(temporary, "outside.cbz");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(outside, "archive");
+            try
+            {
+                var link = Path.Combine(folder, "BLAME! v01.cbz");
+                File.CreateSymbolicLink(link, outside);
+                var disk = NewDisk();
+                disk.Setup(value => value.FolderExists(folder)).Returns(true);
+                disk.Setup(value => value.GetFiles(folder, false)).Returns(new[] { link });
+                var roots = new Mock<IRootFolderService>();
+                roots.Setup(value => value.All()).Returns(new List<RootFolder> { new RootFolder { Path = root } });
+                var manga = new Mock<IMangaService>();
+                manga.Setup(value => value.All()).Returns(new MangaModel[0]);
+                var service = new MangaLibraryScanService(
+                    roots.Object,
+                    manga.Object,
+                    new MangaReleaseParser(),
+                    disk.Object,
+                    LogManager.GetCurrentClassLogger());
+
+                var result = service.ScanFolder(folder);
+
+                result.Files.Should().BeEmpty();
+                result.Warnings.Should().ContainSingle(value => value.Contains("outside its configured root"));
+            }
+            finally
+            {
+                Directory.Delete(temporary, true);
+            }
         }
 
         private static Mock<IDiskProvider> NewDisk()

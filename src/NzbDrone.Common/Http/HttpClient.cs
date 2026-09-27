@@ -286,7 +286,7 @@ namespace NzbDrone.Common.Http
 
                     if (name != null && container.GetCookies((Uri)url)[name] == null)
                     {
-                        _logger.Debug("Cookie '{0}' was declined without error by {1}: {2}", name, url, cookieHeader);
+                        _logger.Debug("Cookie '{0}' was declined without error by {1}", name, url);
                     }
                 }
                 catch (Exception ex)

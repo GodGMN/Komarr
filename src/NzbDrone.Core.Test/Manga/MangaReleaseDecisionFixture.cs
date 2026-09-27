@@ -137,6 +137,42 @@ namespace NzbDrone.Core.Test.Manga
             decision.ReviewReasons.Should().Contain(x => x.Contains("Custom format score is unknown"));
         }
 
+        [Test]
+        public void Explicit_source_preference_allows_only_better_imported_quality_until_cutoff()
+        {
+            var manga = NewManga();
+            manga.QualityPolicy.SourcePreference = new List<string> { "Raw", "Scanlation", "Digital" };
+            manga.QualityPolicy.UpgradeCutoffSource = "Digital";
+            var release = NewRelease("BLAME! v01 (Digital)");
+            var items = NewItems();
+            var match = _matcher.Match(_parser.Parse(release.Title), new[] { manga }, items);
+            var file = new MangaFile { Id = 5, MangaId = 1, Source = "Raw" };
+            var links = new[] { new MangaFileItem { MangaFileId = 5, MangaItemId = 1 } };
+
+            var upgrade = _engine.Evaluate(manga, match, match.Candidates.Single(), release, new[] { file }, links);
+            file.Source = "Digital";
+            var atCutoff = _engine.Evaluate(manga, match, match.Candidates.Single(), release, new[] { file }, links);
+
+            upgrade.IsUpgrade.Should().BeTrue();
+            upgrade.CanGrabAutomatically.Should().BeTrue();
+            atCutoff.IsUpgrade.Should().BeFalse();
+            atCutoff.CanGrabAutomatically.Should().BeFalse();
+        }
+
+        [Test]
+        public void Edition_variant_requires_explicit_policy_for_automatic_grab()
+        {
+            var manga = NewManga();
+            var release = NewRelease("BLAME! v01 Omnibus");
+            var match = _matcher.Match(_parser.Parse(release.Title), new[] { manga }, NewItems());
+
+            var decision = _engine.Evaluate(manga, match, match.Candidates.Single(), release, null, null);
+
+            decision.CanGrabManually.Should().BeTrue();
+            decision.CanGrabAutomatically.Should().BeFalse();
+            decision.ReviewReasons.Should().Contain(value => value.Contains("Edition variant"));
+        }
+
         private static MangaModel NewManga()
         {
             return new MangaModel { Id = 1, PreferredTitle = "BLAME!", Monitored = true, TrackingMode = MangaTrackingMode.Volume };

@@ -134,6 +134,23 @@ namespace Readarr.Api.V1.Manga
             return _manga.GetFiles(id).ToList();
         }
 
+        [HttpPut("{id:int}/quality-policy")]
+        public ActionResult<NzbDrone.Core.Manga.Manga> SetQualityPolicy(int id, [FromBody] MangaReleasePolicy policy)
+        {
+            try
+            {
+                return _manga.SetQualityPolicy(id, policy);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpGet("{id:int}/search")]
         public async Task<ActionResult<MangaIndexerSearchResult>> Search(int id)
         {

@@ -183,6 +183,56 @@ namespace NzbDrone.Core.Test.Manga
         }
 
         [Test]
+        public async Task Automatic_grab_uses_fetched_release_without_interactive_research()
+        {
+            var release = NewRelease("BLAME! v01", DownloadProtocol.Torrent);
+            var client = SetupClient(DownloadProtocol.Torrent, "qBittorrent");
+            client.Setup(value => value.Download(It.IsAny<RemoteBook>(), null)).ReturnsAsync("auto-hash");
+
+            var download = await _service.GrabAutomatic(7, release, 10);
+
+            download.Status.Should().Be(MangaDownloadStatus.Sent);
+            download.DownloadId.Should().Be("auto-hash");
+            _indexers.Verify(value => value.Search(It.IsAny<MangaModel>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public async Task Automatic_grab_rejects_fuzzy_release_and_unmonitored_item()
+        {
+            var fuzzy = NewRelease("BLAMR! v01", DownloadProtocol.Torrent);
+            Func<Task> fuzzyGrab = async () => await _service.GrabAutomatic(7, fuzzy);
+            await fuzzyGrab.Should().ThrowAsync<MangaGrabValidationException>();
+
+            _volume.Monitored = false;
+            var exact = NewRelease("BLAME! v01", DownloadProtocol.Torrent);
+            Func<Task> unmonitoredGrab = async () => await _service.GrabAutomatic(7, exact);
+            await unmonitoredGrab.Should().ThrowAsync<MangaGrabValidationException>();
+            _downloads.Verify(value => value.Insert(It.IsAny<MangaDownload>()), Times.Never());
+        }
+
+        [Test]
+        public async Task Automatic_grab_does_not_duplicate_in_progress_item_with_another_release_guid()
+        {
+            var release = NewRelease("BLAME! v01", DownloadProtocol.Torrent);
+            _downloads.Setup(value => value.GetByMangaId(7)).Returns(new[]
+            {
+                new MangaDownload
+                {
+                    MangaId = 7,
+                    ReleaseGuid = "other-release",
+                    Status = MangaDownloadStatus.Sent,
+                    CoveredItemIds = new List<int> { 10 }
+                }
+            });
+            SetupClient(DownloadProtocol.Torrent, "qBittorrent");
+
+            Func<Task> action = async () => await _service.GrabAutomatic(7, release);
+
+            await action.Should().ThrowAsync<MangaGrabValidationException>().WithMessage("*already being downloaded*");
+            _downloads.Verify(value => value.Insert(It.IsAny<MangaDownload>()), Times.Never());
+        }
+
+        [Test]
         public void New_client_settings_use_a_komarr_category()
         {
             new QBittorrentSettings().MusicCategory.Should().Be("komarr");

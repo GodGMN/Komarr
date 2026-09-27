@@ -51,6 +51,8 @@ namespace NzbDrone.Core.Manga
         IEnumerable<MangaItem> GetItems(int mangaId);
         MangaItem AddItem(int mangaId, MangaItemAddOptions options);
         MangaItem SetItemMonitored(int mangaId, int itemId, bool monitored);
+        void MarkSearched(int mangaId);
+        Manga SetQualityPolicy(int mangaId, MangaReleasePolicy policy);
         IEnumerable<MangaFile> GetFiles(int mangaId);
     }
 
@@ -131,6 +133,30 @@ namespace NzbDrone.Core.Manga
 
             item.Monitored = monitored;
             return _items.Update(item);
+        }
+
+        public void MarkSearched(int mangaId)
+        {
+            var manga = Find(mangaId);
+            if (manga != null)
+            {
+                manga.LastSearchTime = DateTime.UtcNow;
+                _repository.Update(manga);
+            }
+        }
+
+        public Manga SetQualityPolicy(int mangaId, MangaReleasePolicy policy)
+        {
+            var manga = Find(mangaId) ?? throw new KeyNotFoundException("Manga was not found.");
+            if (policy == null || policy.SourcePreference == null || policy.SourcePreference.Count > 10 ||
+                (!string.IsNullOrWhiteSpace(policy.UpgradeCutoffSource) &&
+                    !policy.SourcePreference.Contains(policy.UpgradeCutoffSource, StringComparer.OrdinalIgnoreCase)))
+            {
+                throw new ArgumentException("Choose a source cutoff from the ordered source preference list.");
+            }
+
+            manga.QualityPolicy = policy;
+            return _repository.Update(manga);
         }
 
         public IEnumerable<MangaFile> GetFiles(int mangaId) => _files.GetByMangaId(mangaId);

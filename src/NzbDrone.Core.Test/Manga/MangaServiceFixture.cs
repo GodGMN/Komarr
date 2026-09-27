@@ -39,6 +39,40 @@ namespace NzbDrone.Core.Test.Manga
         }
 
         [Test]
+        public void Upgrade_cutoff_must_be_present_in_ordered_sources()
+        {
+            var manga = new MangaModel { Id = 7, PreferredTitle = "BLAME!" };
+            _repository.Setup(value => value.Find(7)).Returns(manga);
+            _repository.Setup(value => value.Update(manga)).Returns(manga);
+
+            Action invalid = () => _service.SetQualityPolicy(7, new MangaReleasePolicy
+            {
+                SourcePreference = new List<string> { "Raw" },
+                UpgradeCutoffSource = "Digital"
+            });
+            invalid.Should().Throw<ArgumentException>();
+
+            var saved = _service.SetQualityPolicy(7, new MangaReleasePolicy
+            {
+                SourcePreference = new List<string> { "Raw", "Scanlation", "Digital" },
+                UpgradeCutoffSource = "Digital"
+            });
+            saved.QualityPolicy.UpgradeCutoffSource.Should().Be("Digital");
+        }
+
+        [Test]
+        public void Search_time_is_persisted_for_rotating_missing_searches()
+        {
+            var manga = new MangaModel { Id = 7, PreferredTitle = "BLAME!" };
+            _repository.Setup(value => value.Find(7)).Returns(manga);
+
+            _service.MarkSearched(7);
+
+            manga.LastSearchTime.Should().NotBeNull();
+            _repository.Verify(value => value.Update(manga), Times.Once());
+        }
+
+        [Test]
         public void Add_persists_selected_identity_and_metadata()
         {
             _metadata.Setup(x => x.GetById(30149, false)).Returns(new AniListResult

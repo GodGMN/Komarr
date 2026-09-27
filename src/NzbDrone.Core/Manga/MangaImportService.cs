@@ -22,6 +22,7 @@ namespace NzbDrone.Core.Manga
         private readonly IDiskProvider _disk;
         private readonly IConfigService _config;
         private readonly IMangaHistoryService _history;
+        private readonly IMangaReleaseParser _parser;
         private readonly Logger _logger;
 
         public MangaImportService(
@@ -32,6 +33,7 @@ namespace NzbDrone.Core.Manga
             IDiskProvider disk,
             IConfigService config,
             IMangaHistoryService history,
+            IMangaReleaseParser parser,
             Logger logger)
         {
             _manga = manga;
@@ -41,6 +43,7 @@ namespace NzbDrone.Core.Manga
             _disk = disk;
             _config = config;
             _history = history;
+            _parser = parser;
             _logger = logger;
         }
 
@@ -65,11 +68,12 @@ namespace NzbDrone.Core.Manga
             var ready = _downloadFiles.GetByDownloadId(download.Id)
                 .Where(file => file.Status == MangaDownloadFileStatus.Ready)
                 .ToList();
+            var parsed = _parser.Parse(download.ReleaseTitle);
             foreach (var file in ready)
             {
                 try
                 {
-                    ImportOne(download, manga, file, root, destinationFolder, title);
+                    ImportOne(download, manga, file, root, destinationFolder, title, parsed);
                 }
                 catch (Exception ex)
                 {
@@ -86,7 +90,7 @@ namespace NzbDrone.Core.Manga
             return ready.Count(file => file.Status == MangaDownloadFileStatus.Imported);
         }
 
-        private void ImportOne(MangaDownload download, Manga manga, MangaDownloadFile file, string root, string folder, string title)
+        private void ImportOne(MangaDownload download, Manga manga, MangaDownloadFile file, string root, string folder, string title, ParsedMangaReleaseInfo parsed)
         {
             if (!Inside(root, folder))
             {
@@ -172,7 +176,11 @@ namespace NzbDrone.Core.Manga
                     Modified = _disk.FileGetLastWrite(target),
                     DateAdded = DateTime.UtcNow,
                     OriginalFilePath = file.Path,
-                    SceneName = download.ReleaseTitle
+                    SceneName = download.ReleaseTitle,
+                    ReleaseGroup = parsed.ReleaseGroup,
+                    Language = parsed.Language,
+                    Source = parsed.Source,
+                    EditionLabel = parsed.EditionHint
                 });
                 foreach (var item in items)
                 {

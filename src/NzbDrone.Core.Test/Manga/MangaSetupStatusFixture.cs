@@ -7,6 +7,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Backup;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Manga;
@@ -27,6 +28,7 @@ namespace NzbDrone.Core.Test.Manga
         private Mock<IAniListMetadataClient> _anilist;
         private Mock<IBackupService> _backups;
         private Mock<IDiskProvider> _disk;
+        private Mock<IConfigFileProvider> _config;
         private MangaSetupStatusService _service;
 
         [SetUp]
@@ -53,6 +55,7 @@ namespace NzbDrone.Core.Test.Manga
             _disk = new Mock<IDiskProvider>();
             _disk.Setup(value => value.FolderExists("/manga")).Returns(true);
             _disk.Setup(value => value.GetAvailableSpace("/manga")).Returns(2L * 1024 * 1024 * 1024);
+            _config = new Mock<IConfigFileProvider>();
             _service = new MangaSetupStatusService(
                 _database.Object,
                 _roots.Object,
@@ -61,7 +64,8 @@ namespace NzbDrone.Core.Test.Manga
                 _remotePaths.Object,
                 _anilist.Object,
                 _backups.Object,
-                _disk.Object);
+                _disk.Object,
+                _config.Object);
         }
 
         [Test]
@@ -75,6 +79,7 @@ namespace NzbDrone.Core.Test.Manga
             status.Checks.Single(value => value.Key == "anilist").State.Should().Be("warning");
             status.Checks.Single(value => value.Key == "backups").State.Should().Be("warning");
             status.BackupWarning.Should().Contain("credentials");
+            status.Checks.Single(value => value.Key == "authentication").State.Should().Be("warning");
         }
 
         [Test]

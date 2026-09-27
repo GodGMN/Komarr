@@ -86,11 +86,10 @@ namespace NzbDrone.Core.Manga
             }
 
             var index = new MangaAliasIndex(library);
-            var items = _items.All().GroupBy(value => value.MangaId).ToDictionary(group => group.Key, group => group.ToList());
-            var files = _files.All().GroupBy(value => value.MangaId).ToDictionary(group => group.Key, group => group.ToList());
-            var fileItems = _fileItems.All().GroupBy(value => value.MangaFileId).ToDictionary(group => group.Key, group => group.ToList());
-            var blocked = _blocklist.All().Where(value => !string.IsNullOrWhiteSpace(value.ReleaseGuid))
-                .Select(value => (value.MangaId, value.IndexerId, Guid: value.ReleaseGuid.ToUpperInvariant())).ToHashSet();
+            var items = new Dictionary<int, List<MangaItem>>();
+            var files = new Dictionary<int, List<MangaFile>>();
+            var fileItems = new Dictionary<int, List<MangaFileItem>>();
+            var blocked = new Dictionary<int, HashSet<(int IndexerId, string Guid)>>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var release in releases ?? Enumerable.Empty<ReleaseInfo>())
@@ -131,7 +130,7 @@ namespace NzbDrone.Core.Manga
                         continue;
                     }
 
-                    var scopedItems = lookup.Candidates.SelectMany(value => items.GetValueOrDefault(value.Id) ?? new List<MangaItem>()).ToList();
+                    var scopedItems = lookup.Candidates.SelectMany(value => GetItems(value.Id)).ToList();
                     var match = _matcher.Match(parsed, lookup.Candidates, scopedItems);
                     if (match.Candidates.Count == 0)
                     {
@@ -146,10 +145,10 @@ namespace NzbDrone.Core.Manga
 
                     foreach (var candidate in match.Candidates)
                     {
-                        var mangaFiles = files.GetValueOrDefault(candidate.Manga.Id) ?? new List<MangaFile>();
-                        var links = mangaFiles.SelectMany(value => fileItems.GetValueOrDefault(value.Id) ?? new List<MangaFileItem>());
+                        var mangaFiles = GetFiles(candidate.Manga.Id);
+                        var links = GetFileItems(candidate.Manga.Id, mangaFiles);
                         var decision = _decisions.Evaluate(candidate.Manga, match, candidate, release, mangaFiles, links);
-                        if (blocked.Contains((candidate.Manga.Id, release.IndexerId, release.Guid?.ToUpperInvariant())) &&
+                        if (GetBlocked(candidate.Manga.Id).Contains((release.IndexerId, release.Guid?.ToUpperInvariant())) &&
                             !decision.Rejections.Contains("Release is blocklisted."))
                         {
                             decision.Rejections.Add("Release is blocklisted after a failed download.");
@@ -178,6 +177,52 @@ namespace NzbDrone.Core.Manga
             }
 
             return result;
+
+            List<MangaItem> GetItems(int mangaId)
+            {
+                if (!items.TryGetValue(mangaId, out var scoped))
+                {
+                    scoped = _items.GetByMangaId(mangaId).ToList();
+                    items.Add(mangaId, scoped);
+                }
+
+                return scoped;
+            }
+
+            List<MangaFile> GetFiles(int mangaId)
+            {
+                if (!files.TryGetValue(mangaId, out var scoped))
+                {
+                    scoped = _files.GetByMangaId(mangaId).ToList();
+                    files.Add(mangaId, scoped);
+                }
+
+                return scoped;
+            }
+
+            List<MangaFileItem> GetFileItems(int mangaId, List<MangaFile> mangaFiles)
+            {
+                if (!fileItems.TryGetValue(mangaId, out var scoped))
+                {
+                    scoped = _fileItems.GetByFileIds(mangaFiles.Select(value => value.Id)).ToList();
+                    fileItems.Add(mangaId, scoped);
+                }
+
+                return scoped;
+            }
+
+            HashSet<(int IndexerId, string Guid)> GetBlocked(int mangaId)
+            {
+                if (!blocked.TryGetValue(mangaId, out var scoped))
+                {
+                    scoped = _blocklist.GetByMangaId(mangaId)
+                        .Where(value => !string.IsNullOrWhiteSpace(value.ReleaseGuid))
+                        .Select(value => (value.IndexerId, value.ReleaseGuid.ToUpperInvariant())).ToHashSet();
+                    blocked.Add(mangaId, scoped);
+                }
+
+                return scoped;
+            }
         }
     }
 }

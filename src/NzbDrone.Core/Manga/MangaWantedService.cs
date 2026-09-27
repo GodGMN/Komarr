@@ -23,6 +23,13 @@ namespace NzbDrone.Core.Manga
     {
         List<MangaWantedItem> GetForManga(int mangaId);
         List<MangaWantedItem> GetMissing();
+        MangaWantedPageResult GetMissingPage(int offset, int limit);
+    }
+
+    public class MangaWantedPageResult
+    {
+        public List<MangaWantedItem> Items { get; set; } = new ();
+        public int? NextOffset { get; set; }
     }
 
     public class MangaWantedService : IMangaWantedService
@@ -54,6 +61,22 @@ namespace NzbDrone.Core.Manga
                 .ThenBy(item => item.NumberDecimal ?? decimal.MaxValue)
                 .ThenBy(item => item.NumberText)
                 .ToList();
+        }
+
+        public MangaWantedPageResult GetMissingPage(int offset, int limit)
+        {
+            offset = System.Math.Max(0, offset);
+            limit = System.Math.Clamp(limit, 1, 50);
+            var monitored = _manga.All().Where(manga => manga.Monitored)
+                .OrderBy(manga => manga.PreferredTitle ?? manga.TitleRomaji)
+                .ThenBy(manga => manga.Id)
+                .ToList();
+            var page = monitored.Skip(offset).Take(limit).ToList();
+            return new MangaWantedPageResult
+            {
+                Items = page.SelectMany(GetForManga).Where(item => item.Missing).ToList(),
+                NextOffset = (offset + page.Count) < monitored.Count ? offset + page.Count : null
+            };
         }
 
         private List<MangaWantedItem> GetForManga(Manga manga)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using FluentAssertions;
 using Moq;
 using NLog;
@@ -132,6 +133,34 @@ namespace NzbDrone.Core.Test.Manga
             _file.Reason.Should().Contain("outside");
             _disk.Verify(value => value.CopyFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
             _history.Verify(value => value.Record(_download, MangaHistoryEventType.NeedsReview, It.IsAny<string>(), _file), Times.Once());
+        }
+
+        [Test]
+        public void Symlinked_folder_outside_configured_root_is_rejected_before_transfer()
+        {
+            var temporary = Path.Combine(Path.GetTempPath(), $"komarr-import-{Guid.NewGuid():N}");
+            var root = Path.Combine(temporary, "library");
+            var outside = Path.Combine(temporary, "outside");
+            Directory.CreateDirectory(root);
+            Directory.CreateDirectory(outside);
+            try
+            {
+                var link = Path.Combine(root, "BLAME!");
+                Directory.CreateSymbolicLink(link, outside);
+                _savedManga.RootFolderPath = root;
+                _savedManga.Path = link;
+                _disk.Setup(value => value.FolderExists(root)).Returns(true);
+
+                _service.ImportReady(_download).Should().Be(0);
+
+                _file.Status.Should().Be(MangaDownloadFileStatus.ManualReview);
+                _file.Reason.Should().Contain("outside");
+                _disk.Verify(value => value.CopyFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+            }
+            finally
+            {
+                Directory.Delete(temporary, true);
+            }
         }
 
         [Test]

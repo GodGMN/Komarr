@@ -76,6 +76,7 @@ namespace NzbDrone.Core.Test.Manga
 
             indexers.Verify(value => value.Search(manga, false), Times.Once());
             grab.Verify(value => value.GrabAutomatic(7, evaluation.Release, null), Times.Once());
+            wanted.Verify(value => value.GetMissing(), Times.Never());
         }
 
         [Test]

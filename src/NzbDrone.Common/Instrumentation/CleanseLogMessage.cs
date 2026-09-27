@@ -9,6 +9,11 @@ namespace NzbDrone.Common.Instrumentation
     {
         private static readonly Regex[] CleansingRules =
         {
+            // HTTP authentication and session headers
+            new (@"(?:Authorization|Proxy-Authorization|X-Api-Key|X-Auth-Token):\s*(?<secret>[^\r\n,"";]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            new (@"(?:Set-Cookie|Cookie):\s*(?<secret>[^\r\n]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            new (@"""(?:api_?key|passkey|password|cookie|set-cookie|authorization)""\s*:\s*""(?<secret>[^""]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+
             // Url
             new (@"(?<=\?|&|: )((?:api|auth|pass)?key|(?:access[-_]?)?token|auth|user|uid|api|[a-z_]*apikey|account|passwd)=(?<secret>[^&=""]+?)(?=[ ""&=]|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase),
             new (@"(?<=\?|&)[^=]*?(username|password)=(?<secret>[^&=]+?)(?= |&|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase),

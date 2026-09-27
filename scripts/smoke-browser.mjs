@@ -115,6 +115,14 @@ try {
     return reply(route, savedItems);
   });
   await page.route(/\/api\/v1\/manga\/123\/wanted$/, route => reply(route, wantedItems));
+  await page.route(/\/api\/v1\/manga\/wanted\/page/, route => {
+    const offset = new URL(route.request().url()).searchParams.get('offset');
+    return reply(route, offset === '0' ? { items: wantedItems, nextOffset: 50 } : {
+      items: [{ mangaId: 123, mangaTitle: 'BLAME!', itemId: 99, type: 0, numberText: '99',
+        monitored: true, itemMonitored: true, owned: false, inProgress: false }],
+      nextOffset: null
+    });
+  });
   await page.route(/\/api\/v1\/manga\/wanted$/, route => reply(route, wantedItems));
   await page.route(/\/api\/v1\/manga\/123\/items\/10\/monitor$/, route => {
     const monitored = route.request().postDataJSON().monitored;
@@ -171,6 +179,9 @@ try {
   await page.goto(`${baseUrl}/manga/wanted`, { waitUntil: 'networkidle' });
   await page.getByText('Missing Manga').first().waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /BLAME! · Volume 1/);
+  await page.getByRole('button', { name: 'Load More Manga' }).click();
+  await page.getByText(/BLAME! · Volume 99/).waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /BLAME! · Volume 99/);
   await page.getByRole('link', { name: 'Search Releases' }).first().click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
   assert.equal(await page.getByRole('combobox', { name: 'Manga item' }).inputValue(), '10');

@@ -92,7 +92,7 @@ namespace NzbDrone.Core.Manga
 
         private void ImportOne(MangaDownload download, Manga manga, MangaDownloadFile file, string root, string folder, string title, ParsedMangaReleaseInfo parsed)
         {
-            if (!Inside(root, folder))
+            if (!MangaPathSafety.IsInsidePhysicalRoot(root, folder))
             {
                 NeedsReview(download, file, "The manga folder is outside its configured root folder.");
                 return;
@@ -122,7 +122,7 @@ namespace NzbDrone.Core.Manga
             var last = NumberLabel(ordered.Last(), manga.TrackingMode);
             var range = first == last ? first : $"{first}-{unit}{last}";
             var target = Path.GetFullPath(Path.Combine(folder, $"{title} - {unit}{range}{extension}"));
-            if (!Inside(root, target) || !Inside(folder, target) || string.Equals(file.Path, target, StringComparison.OrdinalIgnoreCase))
+            if (!MangaPathSafety.IsInside(root, target) || !MangaPathSafety.IsInside(folder, target) || string.Equals(file.Path, target, StringComparison.OrdinalIgnoreCase))
             {
                 NeedsReview(download, file, "The destination path is unsafe or matches the source file.");
                 return;
@@ -246,12 +246,6 @@ namespace NzbDrone.Core.Manga
             var safe = new string(source.Select(character => char.IsControl(character) || "<>:\"/\\|?*".Contains(character) ? '_' : character).ToArray())
                 .Trim().Trim('.');
             return string.IsNullOrWhiteSpace(safe) ? "Manga" : safe;
-        }
-
-        private static bool Inside(string root, string path)
-        {
-            var relative = Path.GetRelativePath(root, path);
-            return relative != ".." && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
         }
     }
 }

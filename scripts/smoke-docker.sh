@@ -106,3 +106,47 @@ if docker inspect "$name" >/dev/null 2>&1; then
 fi
 start_container
 check_api verify
+docker stop "$name" >/dev/null
+container_running=0
+for attempt in $(seq 1 40); do
+  if ! docker inspect "$name" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.25
+done
+python3 - "$data_dir" <<'PY'
+import pathlib
+import sys
+import xml.etree.ElementTree as ET
+
+path = pathlib.Path(sys.argv[1]) / 'config.xml'
+tree = ET.parse(path)
+root = tree.getroot()
+root.find('AuthenticationMethod').text = 'Basic'
+root.find('AuthenticationRequired').text = 'Enabled'
+tree.write(path, encoding='utf-8', xml_declaration=True)
+PY
+start_container
+python3 - "$base_url" "$data_dir" <<'PY'
+import pathlib
+import sys
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
+
+base_url, data_dir = sys.argv[1:]
+key = ET.parse(pathlib.Path(data_dir) / 'config.xml').getroot().findtext('ApiKey')
+
+def status(path, headers=None):
+    request = urllib.request.Request(base_url + path, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status
+    except urllib.error.HTTPError as error:
+        return error.code
+
+assert status('/api/v1/manga') == 401, 'API allowed a request without its key after authentication was enabled'
+assert status('/api/v1/manga', {'X-Api-Key': key}) == 200, 'API rejected its configured key'
+assert status('/') in (401, 403), 'UI was accessible without credentials after authentication was enabled'
+print('auth: UI and API protect anonymous requests; configured API key works')
+PY

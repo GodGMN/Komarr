@@ -29,6 +29,7 @@ namespace NzbDrone.Core.Manga
         public string SuggestedTitle { get; set; }
         public bool NeedsReview { get; set; }
         public bool Truncated { get; set; }
+        public List<string> Warnings { get; set; } = new ();
         public List<MangaLibraryFile> Files { get; set; } = new ();
     }
 
@@ -120,6 +121,12 @@ namespace NzbDrone.Core.Manga
                         foldersInspected++;
                         try
                         {
+                            if (!MangaPathSafety.IsInsidePhysicalRoot(root.Path, folderPath))
+                            {
+                                result.Errors.Add($"Folder resolves outside its configured root: {folderPath}");
+                                continue;
+                            }
+
                             var folder = InspectFolder(root.Path, folderPath, aliases, mapped);
                             if (folder.Files.Count > 0 || folder.Truncated)
                             {
@@ -161,6 +168,11 @@ namespace NzbDrone.Core.Manga
                 throw new KeyNotFoundException("Manga folder was not found directly under a configured root.");
             }
 
+            if (!MangaPathSafety.IsInsidePhysicalRoot(root.Path, normalized))
+            {
+                throw new ArgumentException("Manga folder resolves outside its configured root.");
+            }
+
             var library = _manga.All().ToList();
             var aliases = new MangaAliasIndex(library, true);
             var mapped = library.Where(manga => !string.IsNullOrWhiteSpace(manga.Path))
@@ -198,6 +210,12 @@ namespace NzbDrone.Core.Manga
             foreach (var path in _disk.GetFiles(folderPath, false))
             {
                 entriesInspected++;
+                if (!MangaPathSafety.IsInsidePhysicalRoot(rootPath, path))
+                {
+                    AddUnsafePathWarning(folder);
+                    continue;
+                }
+
                 if (SupportedExtensions.Contains(Path.GetExtension(path)))
                 {
                     paths.Add(path);
@@ -216,9 +234,21 @@ namespace NzbDrone.Core.Manga
                 folder.Truncated |= nested.Count > MaximumNestedFolders;
                 foreach (var child in nested.Take(MaximumNestedFolders))
                 {
+                    if (!MangaPathSafety.IsInsidePhysicalRoot(rootPath, child))
+                    {
+                        AddUnsafePathWarning(folder);
+                        continue;
+                    }
+
                     foreach (var path in _disk.GetFiles(child, false))
                     {
                         entriesInspected++;
+                        if (!MangaPathSafety.IsInsidePhysicalRoot(rootPath, path))
+                        {
+                            AddUnsafePathWarning(folder);
+                            continue;
+                        }
+
                         if (SupportedExtensions.Contains(Path.GetExtension(path)))
                         {
                             paths.Add(path);
@@ -263,6 +293,15 @@ namespace NzbDrone.Core.Manga
             }
 
             return folder;
+        }
+
+        private static void AddUnsafePathWarning(MangaLibraryFolder folder)
+        {
+            folder.NeedsReview = true;
+            if (folder.Warnings.Count == 0)
+            {
+                folder.Warnings.Add("A linked folder or file resolves outside its configured root and was skipped.");
+            }
         }
 
         private static string NormalizePath(string path)

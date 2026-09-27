@@ -218,6 +218,11 @@ namespace NzbDrone.Core.Manga
             return titles;
         }
 
+        public static IEnumerable<string> GetAliasTitles(Manga manga)
+        {
+            return GetAliases(manga).Select(alias => alias.Title);
+        }
+
         private static bool Covers(ParsedMangaReleaseInfo release, MangaItem item)
         {
             if (item.Type != (release.UnitType == MangaReleaseUnitType.Volume ? MangaItemType.Volume : MangaItemType.Chapter))

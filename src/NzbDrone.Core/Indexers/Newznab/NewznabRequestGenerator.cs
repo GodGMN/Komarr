@@ -97,6 +97,20 @@ namespace NzbDrone.Core.Indexers.Newznab
         {
             var pageableRequests = new IndexerPageableRequestChain();
 
+            if (searchCriteria is MangaSearchCriteria mangaSearch)
+            {
+                if (SupportsSearch)
+                {
+                    var booksCategories = new[] { 7000 }
+                        .Concat(Settings.Categories?.Where(category => category >= 7000 && category < 8000) ?? Enumerable.Empty<int>())
+                        .Distinct();
+
+                    pageableRequests.Add(GetPagedRequests(1, booksCategories, "search", $"&q={NewsnabifyTitle(mangaSearch.MangaTitle)}"));
+                }
+
+                return pageableRequests;
+            }
+
             if (SupportsBookSearch)
             {
                 AddBookPageableRequests(pageableRequests,

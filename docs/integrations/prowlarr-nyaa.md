@@ -22,6 +22,16 @@ Prowlarr synced Nyaa to Komarr; 1 raw releases for 'One Piece'.
 
 The count and title are live tracker data, so they can change. The proof checks for at least one result in the Books category.
 
+To check a saved manga through the title-only Torznab search path, run:
+
+```bash
+./scripts/prowlarr-nyaa-smoke.py --image komarr:local --manga-id 30149
+```
+
+This adds BLAME! by its explicit AniList ID, searches at most three distinct preferred, English, and romaji titles per indexer, and checks that Nyaa returns a Books release. `GET /api/v1/manga/{id}/search` returns the query list, deduplicated release metadata, and per-indexer errors. It does not download anything. The search uses one page of `t=search` per title with category `7000` plus configured Books categories.
+
+The 2026-09-27 live check sent one distinct BLAME! query and returned 15 Books releases. Some results were related artbooks or editions; the later manga decision checks must reject those when they do not match the saved title and requested item.
+
 ## Raw search endpoint
 
 `GET /api/v1/indexer/rawsearch?query=<term>` uses normal Komarr API authentication. It searches enabled interactive indexers through their existing provider implementation and returns at most 50 release summaries plus the full result count. It neither matches releases to the library nor starts a download. It reports the count and error, if any, for each queried indexer.
@@ -31,6 +41,6 @@ This endpoint is an early acquisition diagnostic. The inherited `/api/v1/release
 ## Compatibility gaps for the manga search work
 
 - Prowlarr currently connects through its Readarr application type. Komarr keeps the relevant Readarr-compatible indexer API for this integration.
-- The query uses the inherited author search criteria to reach Torznab's book/generic search requests. Manga title parsing, exact matching, edition/volume coverage, and decision explanations still need manga-domain work.
-- Nyaa reports `7000` (Books) plus a tracker-specific category ID in this proof. A reliable manga category and query policy belongs to the later Torznab/Newznab adaptation task.
+- The older raw query uses inherited author search criteria. The saved manga search uses a manga title-only request through the Torznab/Newznab provider and Books categories.
+- Nyaa reports `7000` (Books) plus a tracker-specific category ID in this proof. The saved manga search includes the Books parent category.
 - Search results are observational. Komarr does not grab a result from this endpoint, especially when a match is ambiguous.

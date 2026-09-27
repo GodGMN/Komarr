@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Core.Manga;
 using NzbDrone.Core.MetadataSource.AniList;
@@ -12,10 +13,12 @@ namespace Readarr.Api.V1.Manga
     public class MangaController : Controller
     {
         private readonly IMangaService _manga;
+        private readonly IMangaIndexerSearchService _search;
 
-        public MangaController(IMangaService manga)
+        public MangaController(IMangaService manga, IMangaIndexerSearchService search)
         {
             _manga = manga;
+            _search = search;
         }
 
         [HttpGet]
@@ -51,6 +54,18 @@ namespace Readarr.Api.V1.Manga
             }
 
             return _manga.GetFiles(id).ToList();
+        }
+
+        [HttpGet("{id:int}/search")]
+        public async Task<ActionResult<MangaIndexerSearchResult>> Search(int id)
+        {
+            var manga = _manga.Find(id);
+            if (manga == null)
+            {
+                return NotFound();
+            }
+
+            return await _search.Search(manga);
         }
 
         [HttpPost]

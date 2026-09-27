@@ -100,5 +100,23 @@ namespace NzbDrone.Core.Test.IndexerTests.NewznabTests
             pageTier.Url.Query.Should().NotContain(" & ");
             pageTier.Url.Query.Should().NotContain("%26");
         }
+
+        [Test]
+        public void manga_search_uses_one_generic_books_query_without_author()
+        {
+            Subject.PageSize = 100;
+            Subject.MaxPages = 30;
+            Subject.Settings.Categories = new[] { 3030, 7020 };
+
+            var requests = Subject.GetSearchRequests(new MangaSearchCriteria { MangaTitle = "BLAME!" });
+
+            requests.Tiers.Should().Be(1);
+            var pages = requests.GetTier(0).First().ToList();
+            pages.Should().ContainSingle();
+            pages[0].Url.Query.Should().Contain("t=search");
+            pages[0].Url.Query.Should().Contain("cat=7000,7020");
+            pages[0].Url.Query.Should().Contain("q=BLAME");
+            pages[0].Url.Query.Should().NotContain("author=");
+        }
     }
 }

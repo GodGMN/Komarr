@@ -23,6 +23,7 @@ using NzbDrone.Core.ImportLists.Exclusions;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Instrumentation;
 using NzbDrone.Core.Jobs;
+using NzbDrone.Core.Manga;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Notifications;
@@ -106,6 +107,11 @@ namespace NzbDrone.Core.Datastore
                   .Ignore(d => d.Protocol);
 
             Mapper.Entity<EntityHistory>("History").RegisterModel();
+
+            Mapper.Entity<NzbDrone.Core.Manga.Manga>("Manga").RegisterModel();
+            Mapper.Entity<MangaItem>("MangaItems").RegisterModel();
+            Mapper.Entity<MangaFile>("MangaFiles").RegisterModel();
+            Mapper.Entity<MangaFileItem>("MangaFileItems").RegisterModel();
 
             Mapper.Entity<Author>("Authors")
                   .Ignore(s => s.RootFolderPath)

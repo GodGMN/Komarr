@@ -42,9 +42,35 @@ try {
     id: 123, aniListId: 30149, preferredTitle: 'BLAME!', titleRomaji: 'BLAME!',
     trackingMode: 0, monitored: true, aniListVolumeCount: 10
   }));
-  await page.route(/\/api\/v1\/manga\/123\/items$/, route => reply(route, [
+  let savedItems = [
     { id: 10, mangaId: 123, type: 0, numberText: '1', monitored: true }
-  ]));
+  ];
+  let wantedItems = [
+    { mangaId: 123, mangaTitle: 'BLAME!', itemId: 10, type: 0, numberText: '1',
+      monitored: true, itemMonitored: true, owned: false, inProgress: false }
+  ];
+  await page.route(/\/api\/v1\/manga\/123\/items$/, route => {
+    if (route.request().method() === 'POST') {
+      const request = route.request().postDataJSON();
+      assert.equal(request.numberText, '11');
+      const added = { id: 12, mangaId: 123, type: 0, numberText: '11', monitored: true };
+      savedItems = [...savedItems, added];
+      wantedItems = [...wantedItems, { mangaId: 123, mangaTitle: 'BLAME!', itemId: 12,
+        type: 0, numberText: '11', monitored: true, itemMonitored: true, owned: false, inProgress: false }];
+      return reply(route, added);
+    }
+
+    return reply(route, savedItems);
+  });
+  await page.route(/\/api\/v1\/manga\/123\/wanted$/, route => reply(route, wantedItems));
+  await page.route(/\/api\/v1\/manga\/wanted$/, route => reply(route, wantedItems));
+  await page.route(/\/api\/v1\/manga\/123\/items\/10\/monitor$/, route => {
+    const monitored = route.request().postDataJSON().monitored;
+    savedItems = savedItems.map(item => item.id === 10 ? { ...item, monitored } : item);
+    wantedItems = wantedItems.map(item => item.itemId === 10 ?
+      { ...item, monitored, itemMonitored: monitored } : item);
+    return reply(route, savedItems[0]);
+  });
   await page.route(/\/api\/v1\/manga\/123\/files$/, route => reply(route, []));
   await page.route(/\/api\/v1\/manga\/123\/downloads$/, route => reply(route, [
     { id: 98, releaseTitle: 'BLAME! v02', downloadClient: 'qBittorrent', status: 2 }
@@ -90,6 +116,12 @@ try {
     return reply(route, { id: 99, releaseTitle: 'BLAME! v01 [English]',
       downloadClient: 'qBittorrent', downloadId: 'fixture-hash', status: 1 });
   });
+  await page.goto(`${baseUrl}/manga/wanted`, { waitUntil: 'networkidle' });
+  await page.getByText('Missing Manga').first().waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /BLAME! · Volume 1/);
+  await page.getByRole('link', { name: 'Search Releases' }).first().click();
+  await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
+  assert.equal(await page.getByRole('combobox', { name: 'Manga item' }).inputValue(), '10');
   await page.goto(`${baseUrl}/manga/123`, { waitUntil: 'networkidle' });
   await page.getByText('BLAME! v02.cbz').waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /BLAME! v02.cbz · Imported/);
@@ -97,6 +129,11 @@ try {
   assert.match(await page.locator('body').innerText(), /Imported BLAME! - v02.cbz/);
   await page.getByRole('button', { name: 'Clear Blocklist Entry' }).click();
   await page.getByText('No failed releases are blocklisted.').waitFor({ timeout: 30000 });
+  await page.getByRole('textbox', { name: 'New volume number' }).fill('11');
+  await page.getByRole('button', { name: 'Add Volume' }).click();
+  await page.getByText('Volume 11 · Missing').waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: 'Unmonitor' }).first().click();
+  await page.getByText('Volume 1 · Not monitored').waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: 'Search Releases' }).click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: 'Review Release' }).first().click();

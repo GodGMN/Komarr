@@ -46,7 +46,7 @@ class MangaReleaseSearch extends Component {
     super(props);
     this.reviewRef = React.createRef();
     this.state = {
-      selectedItemId: '',
+      selectedItemId: props.initialItemId || '',
       result: null,
       selectedReleaseIndex: null,
       isSearching: false,
@@ -56,6 +56,12 @@ class MangaReleaseSearch extends Component {
       grabError: null,
       grabbed: null
     };
+  }
+
+  componentDidMount() {
+    if (this.props.initialItemId && this.props.items.some((item) => String(item.id) === this.props.initialItemId)) {
+      this.onSearch();
+    }
   }
 
   componentWillUnmount() {
@@ -271,7 +277,12 @@ class MangaReleaseSearch extends Component {
 MangaReleaseSearch.propTypes = {
   manga: PropTypes.object.isRequired,
   items: PropTypes.arrayOf(PropTypes.object).isRequired,
+  initialItemId: PropTypes.string,
   onGrabbed: PropTypes.func.isRequired
+};
+
+MangaReleaseSearch.defaultProps = {
+  initialItemId: ''
 };
 
 export default MangaReleaseSearch;

@@ -50,6 +50,7 @@ namespace NzbDrone.Core.Test.Manga
                     {
                         Id = 30149,
                         TitleRomaji = "BLAME!",
+                        Status = "FINISHED",
                         Synonyms = new List<string> { "Buramu!" },
                         Volumes = 10
                     }
@@ -111,7 +112,7 @@ namespace NzbDrone.Core.Test.Manga
             _metadata.Setup(x => x.GetById(30149, true)).Returns(new AniListResult
             {
                 Availability = AniListAvailability.Available,
-                Media = new List<AniListMedia> { new AniListMedia { Id = 30149, TitleRomaji = "BLAME!", Volumes = 2 } }
+                Media = new List<AniListMedia> { new AniListMedia { Id = 30149, TitleRomaji = "BLAME!", Status = "FINISHED", Volumes = 2 } }
             });
 
             _service.Refresh(7);
@@ -119,6 +120,69 @@ namespace NzbDrone.Core.Test.Manga
             first.Monitored.Should().BeFalse();
             _items.Verify(x => x.Insert(It.Is<MangaItem>(item => item.NumberText == "2" && item.MangaId == 7)), Times.Once());
             _items.Verify(x => x.Insert(It.Is<MangaItem>(item => item.NumberText == "1")), Times.Never());
+        }
+
+        [Test]
+        public void Ongoing_metadata_count_does_not_create_assumed_wanted_items()
+        {
+            _metadata.Setup(x => x.GetById(30149, false)).Returns(new AniListResult
+            {
+                Availability = AniListAvailability.Available,
+                Media = new List<AniListMedia>
+                {
+                    new AniListMedia { Id = 30149, TitleRomaji = "Ongoing Manga", Status = "RELEASING", Volumes = 10 }
+                }
+            });
+            _repository.Setup(x => x.Insert(It.IsAny<MangaModel>())).Returns<MangaModel>(manga => manga);
+
+            _service.Add(new MangaAddOptions { AniListId = 30149, TrackingMode = MangaTrackingMode.Volume });
+
+            _items.Verify(x => x.Insert(It.IsAny<MangaItem>()), Times.Never());
+        }
+
+        [Test]
+        public void Manual_item_can_be_added_and_monitoring_changed_without_metadata_count()
+        {
+            var manga = new MangaModel { Id = 7, TrackingMode = MangaTrackingMode.Chapter };
+            _repository.Setup(x => x.Find(7)).Returns(manga);
+            _items.Setup(x => x.GetByMangaId(7)).Returns(new MangaItem[0]);
+            _items.Setup(x => x.Insert(It.IsAny<MangaItem>())).Returns<MangaItem>(item =>
+            {
+                item.Id = 12;
+                return item;
+            });
+            _items.Setup(x => x.Find(12)).Returns(() => new MangaItem { Id = 12, MangaId = 7, Type = MangaItemType.Chapter, Monitored = true });
+            _items.Setup(x => x.Update(It.IsAny<MangaItem>())).Returns<MangaItem>(item => item);
+
+            var added = _service.AddItem(7, new MangaItemAddOptions { NumberText = "12.5", Title = "Extra" });
+            var unmonitored = _service.SetItemMonitored(7, 12, false);
+
+            added.Type.Should().Be(MangaItemType.Chapter);
+            added.NumberDecimal.Should().Be(12.5m);
+            added.DiscoveredFrom.Should().Be(MangaItemDiscoverySource.Manual);
+            unmonitored.Monitored.Should().BeFalse();
+        }
+
+        [Test]
+        public void Manual_entry_can_confirm_a_stale_metadata_item_on_ongoing_manga()
+        {
+            var manga = new MangaModel { Id = 7, Status = "RELEASING", TrackingMode = MangaTrackingMode.Volume };
+            var stale = new MangaItem
+            {
+                Id = 12, MangaId = 7, Type = MangaItemType.Volume,
+                Monitored = false, DiscoveredFrom = MangaItemDiscoverySource.Metadata
+            };
+            stale.SetNumber("11");
+            _repository.Setup(x => x.Find(7)).Returns(manga);
+            _items.Setup(x => x.GetByMangaId(7)).Returns(new[] { stale });
+            _items.Setup(x => x.Update(It.IsAny<MangaItem>())).Returns<MangaItem>(item => item);
+
+            var confirmed = _service.AddItem(7, new MangaItemAddOptions { NumberText = "011", Monitored = true });
+
+            confirmed.Id.Should().Be(12);
+            confirmed.DiscoveredFrom.Should().Be(MangaItemDiscoverySource.Manual);
+            confirmed.Monitored.Should().BeTrue();
+            _items.Verify(x => x.Insert(It.IsAny<MangaItem>()), Times.Never());
         }
 
         [Test]

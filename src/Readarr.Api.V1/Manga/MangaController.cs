@@ -19,6 +19,7 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaDownloadFileRepository _downloadFiles;
         private readonly IMangaHistoryService _history;
         private readonly IMangaBlocklistService _blocklist;
+        private readonly IMangaWantedService _wanted;
 
         public MangaController(
             IMangaService manga,
@@ -27,7 +28,8 @@ namespace Readarr.Api.V1.Manga
             IMangaGrabService grab,
             IMangaDownloadFileRepository downloadFiles,
             IMangaHistoryService history,
-            IMangaBlocklistService blocklist)
+            IMangaBlocklistService blocklist,
+            IMangaWantedService wanted)
         {
             _manga = manga;
             _search = search;
@@ -36,12 +38,19 @@ namespace Readarr.Api.V1.Manga
             _downloadFiles = downloadFiles;
             _history = history;
             _blocklist = blocklist;
+            _wanted = wanted;
         }
 
         [HttpGet]
         public IEnumerable<NzbDrone.Core.Manga.Manga> GetAll()
         {
             return _manga.All();
+        }
+
+        [HttpGet("wanted")]
+        public IEnumerable<MangaWantedItem> GetWanted()
+        {
+            return _wanted.GetMissing();
         }
 
         [HttpGet("{id:int}")]
@@ -60,6 +69,58 @@ namespace Readarr.Api.V1.Manga
             }
 
             return _manga.GetItems(id).ToList();
+        }
+
+        [HttpGet("{id:int}/wanted")]
+        public ActionResult<IEnumerable<MangaWantedItem>> GetWantedForManga(int id)
+        {
+            try
+            {
+                return _wanted.GetForManga(id);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
+
+        [HttpPost("{id:int}/items")]
+        public ActionResult<MangaItem> AddItem(int id, [FromBody] MangaItemAddOptions options)
+        {
+            try
+            {
+                return _manga.AddItem(id, options);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ex.Message);
+            }
+        }
+
+        [HttpPut("{id:int}/items/{itemId:int}/monitor")]
+        public ActionResult<MangaItem> SetItemMonitored(int id, int itemId, [FromBody] MangaMonitorRequest request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Choose whether this manga item is monitored.");
+            }
+
+            try
+            {
+                return _manga.SetItemMonitored(id, itemId, request.Monitored);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
         }
 
         [HttpGet("{id:int}/files")]
@@ -233,6 +294,11 @@ namespace Readarr.Api.V1.Manga
                 return NotFound();
             }
         }
+    }
+
+    public class MangaMonitorRequest
+    {
+        public bool Monitored { get; set; }
     }
 
     [V1ApiController("manga/lookup")]

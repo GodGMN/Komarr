@@ -19,7 +19,7 @@ docker run -d --name komarr --restart unless-stopped \
   komarr:local
 ```
 
-Open `http://localhost:8787`. The first run creates `config.xml` and `komarr.db` under `/config`. Point Komarr at an empty config directory; Readarr and Librarr databases are not migrated. The `/manga` and `/downloads` paths should match what you configure in the UI and your download client.
+Open `http://localhost:8787` on the host, or `http://<host-LAN-IP>:8787` from another device on the same network. Komarr listens on `0.0.0.0:8787` by default, and the Docker and Compose examples publish that port on all host interfaces. The first run creates `config.xml` and `komarr.db` under `/config`. Point Komarr at an empty config directory; Readarr and Librarr databases are not migrated. The `/manga` and `/downloads` paths should match what you configure in the UI and your download client.
 
 `docker compose up -d --build` uses the tracked Compose file and defaults to local `docker-config/`, `docker-manga/`, and `docker-downloads/` directories. Set `KOMARR_CONFIG`, `KOMARR_MANGA`, `KOMARR_DOWNLOADS`, `KOMARR_PORT`, or `TZ` in a local `.env` file to override them. These local directories and `.env` are gitignored.
 

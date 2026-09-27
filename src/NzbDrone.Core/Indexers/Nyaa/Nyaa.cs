@@ -5,7 +5,7 @@ using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Indexers.Nyaa
 {
-    public class Nyaa : HttpIndexerBase<NyaaSettings>
+    public class Nyaa : HttpIndexerBase<NyaaSettings>, IMangaSearchIndexer
     {
         public override string Name => "Nyaa";
 
@@ -23,7 +23,7 @@ namespace NzbDrone.Core.Indexers.Nyaa
 
         public override IParseIndexerResponse GetParser()
         {
-            return new TorrentRssParser() { UseGuidInfoUrl = true, ParseSizeInDescription = true, ParseSeedersInDescription = true };
+            return new NyaaParser() { UseGuidInfoUrl = true, ParseSizeInDescription = true, ParseSeedersInDescription = true };
         }
     }
 }

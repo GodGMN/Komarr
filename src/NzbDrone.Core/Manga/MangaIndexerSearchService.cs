@@ -55,8 +55,7 @@ namespace NzbDrone.Core.Manga
             }
 
             var indexers = interactive ? _indexerFactory.InteractiveSearchEnabled() : _indexerFactory.AutomaticSearchEnabled();
-            indexers = indexers.Where(indexer => indexer.SupportsSearch &&
-                (indexer.Definition.Implementation == "Torznab" || indexer.Definition.Implementation == "Newznab")).ToList();
+            indexers = indexers.Where(indexer => indexer.SupportsSearch && indexer is IMangaSearchIndexer).ToList();
 
             var searches = indexers.Select(indexer => SearchIndexer(indexer, result.Queries, interactive));
             var batches = await Task.WhenAll(searches);

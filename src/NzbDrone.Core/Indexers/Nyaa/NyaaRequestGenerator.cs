@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.IndexerSearch.Definitions;
 
@@ -19,12 +21,35 @@ namespace NzbDrone.Core.Indexers.Nyaa
 
         public virtual IndexerPageableRequestChain GetSearchRequests(BookSearchCriteria searchCriteria)
         {
-            throw new System.NotImplementedException();
+            var term = searchCriteria.BookTitle.IsNotNullOrWhiteSpace()
+                ? searchCriteria.BookQuery
+                : searchCriteria.AuthorQuery;
+
+            return BuildSearchRequests(term);
         }
 
         public virtual IndexerPageableRequestChain GetSearchRequests(AuthorSearchCriteria searchCriteria)
         {
-            throw new System.NotImplementedException();
+            var term = (searchCriteria as MangaSearchCriteria)?.MangaTitle;
+
+            if (term.IsNullOrWhiteSpace())
+            {
+                term = searchCriteria.AuthorQuery;
+            }
+
+            return BuildSearchRequests(term);
+        }
+
+        private IndexerPageableRequestChain BuildSearchRequests(string term)
+        {
+            var pageableRequests = new IndexerPageableRequestChain();
+
+            if (term.IsNotNullOrWhiteSpace())
+            {
+                pageableRequests.Add(GetPagedRequests(PrepareQuery(term)));
+            }
+
+            return pageableRequests;
         }
 
         private IEnumerable<IndexerRequest> GetPagedRequests(string term)
@@ -41,7 +66,7 @@ namespace NzbDrone.Core.Indexers.Nyaa
 
         private string PrepareQuery(string query)
         {
-            return query.Replace(' ', '+');
+            return Uri.EscapeDataString(query.Replace("+", " ").Trim());
         }
     }
 }

@@ -55,5 +55,39 @@ namespace NzbDrone.Core.Test.IndexerTests.NyaaTests
             torrentInfo.Peers.Should().Be(2 + 1);
             torrentInfo.Seeders.Should().Be(1);
         }
+
+        [Test]
+        public async Task should_parse_nyaa_si_namespaced_metadata()
+        {
+            const string recentFeed = @"<rss xmlns:nyaa=""https://nyaa.si/xmlns/nyaa"" version=""2.0"">
+  <channel>
+    <item>
+      <title>Tokyo Ghoul Jack (2017) (Digital) (DigitalMangaFan)</title>
+      <link>https://example.com/download/1.torrent</link>
+      <guid isPermaLink=""true"">https://example.com/view/1</guid>
+      <pubDate>Thu, 27 Jul 2023 16:16:19 -0000</pubDate>
+      <nyaa:seeders>18</nyaa:seeders>
+      <nyaa:leechers>2</nyaa:leechers>
+      <nyaa:infoHash>e9c4be2e7e1d8ff1257551bee40a603ea3e647e0</nyaa:infoHash>
+      <nyaa:size>365.4 MiB</nyaa:size>
+      <description><![CDATA[<a href=""https://example.com/view/1"">#1 | Tokyo Ghoul Jack</a> | Literature - English-translated]]></description>
+    </item>
+  </channel>
+</rss>";
+
+            Mocker.GetMock<IHttpClient>()
+                .Setup(o => o.ExecuteAsync(It.Is<HttpRequest>(v => v.Method == HttpMethod.Get)))
+                .Returns<HttpRequest>(r => Task.FromResult(new HttpResponse(r, new HttpHeader(), recentFeed)));
+
+            var releases = await Subject.FetchRecent();
+
+            releases.Should().HaveCount(1);
+            var torrentInfo = releases.Single() as TorrentInfo;
+
+            torrentInfo.Seeders.Should().Be(18);
+            torrentInfo.Peers.Should().Be(20);
+            torrentInfo.Size.Should().Be(383149670);
+            torrentInfo.InfoHash.Should().Be("e9c4be2e7e1d8ff1257551bee40a603ea3e647e0");
+        }
     }
 }

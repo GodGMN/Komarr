@@ -112,6 +112,7 @@ namespace NzbDrone.Core.Datastore
             Mapper.Entity<MangaItem>("MangaItems").RegisterModel();
             Mapper.Entity<MangaFile>("MangaFiles").RegisterModel();
             Mapper.Entity<MangaFileItem>("MangaFileItems").RegisterModel();
+            Mapper.Entity<MangaDownload>("MangaDownloads").RegisterModel();
 
             Mapper.Entity<Author>("Authors")
                   .Ignore(s => s.RootFolderPath)

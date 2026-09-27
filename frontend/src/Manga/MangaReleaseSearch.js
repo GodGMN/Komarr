@@ -50,16 +50,21 @@ class MangaReleaseSearch extends Component {
       result: null,
       selectedReleaseIndex: null,
       isSearching: false,
-      error: null
+      error: null,
+      confirmedReview: false,
+      isGrabbing: false,
+      grabError: null,
+      grabbed: null
     };
   }
 
   componentWillUnmount() {
     this.searchRequest?.abortRequest();
+    this.grabRequest?.abortRequest();
   }
 
   onItemChange = (event) => {
-    this.setState({ selectedItemId: event.target.value, result: null, selectedReleaseIndex: null });
+    this.setState({ selectedItemId: event.target.value, result: null, selectedReleaseIndex: null, grabbed: null });
   };
 
   onSearch = () => {
@@ -67,7 +72,7 @@ class MangaReleaseSearch extends Component {
     const { selectedItemId } = this.state;
     const query = selectedItemId ? `?itemId=${encodeURIComponent(selectedItemId)}` : '';
     this.searchRequest?.abortRequest();
-    this.setState({ isSearching: true, error: null, result: null, selectedReleaseIndex: null });
+    this.setState({ isSearching: true, error: null, result: null, selectedReleaseIndex: null, grabbed: null });
     this.searchRequest = createAjaxRequest({
       url: `/manga/${manga.id}/search/decisions${query}`,
       method: 'GET',
@@ -83,14 +88,52 @@ class MangaReleaseSearch extends Component {
   };
 
   onSelect = (index) => {
-    this.setState({ selectedReleaseIndex: index }, () => {
+    this.setState({ selectedReleaseIndex: index, confirmedReview: false, grabError: null, grabbed: null }, () => {
       this.reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  onConfirmationChange = (event) => {
+    this.setState({ confirmedReview: event.target.checked });
+  };
+
+  onGrab = () => {
+    const { manga } = this.props;
+    const { result, selectedReleaseIndex, selectedItemId, confirmedReview } = this.state;
+    const release = result?.releases[selectedReleaseIndex];
+    if (!release?.decision?.canGrabManually || !release.guid) {
+      return;
+    }
+
+    this.setState({ isGrabbing: true, grabError: null, grabbed: null });
+    this.grabRequest = createAjaxRequest({
+      url: `/manga/${manga.id}/grab`,
+      method: 'POST',
+      dataType: 'json',
+      data: JSON.stringify({
+        guid: release.guid,
+        title: release.title,
+        indexerId: release.indexerId,
+        itemId: selectedItemId ? Number(selectedItemId) : null,
+        confirmManualReview: confirmedReview
+      })
+    });
+    this.grabRequest.request.then((grabbed) => {
+      this.setState({ grabbed, isGrabbing: false });
+      this.props.onGrabbed(grabbed);
+    }).catch((xhr) => {
+      if (!xhr.aborted) {
+        const reason = xhr.status === 400 && xhr.responseText?.length < 300 ? xhr.responseText :
+          'The download client could not accept this release. Check the client and try again.';
+        this.setState({ isGrabbing: false, grabError: reason });
+      }
     });
   };
 
   render() {
     const { manga, items } = this.props;
-    const { selectedItemId, result, selectedReleaseIndex, isSearching, error } = this.state;
+    const { selectedItemId, result, selectedReleaseIndex, isSearching, error, confirmedReview,
+      isGrabbing, grabError, grabbed } = this.state;
     const selected = selectedReleaseIndex === null ? null : result?.releases[selectedReleaseIndex];
 
     return (
@@ -195,7 +238,29 @@ class MangaReleaseSearch extends Component {
             {selected.parsed.warnings.length > 0 && (
               <div><strong>Parser notes</strong><ul>{selected.parsed.warnings.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>
             )}
-            {selected.decision.canGrabManually && <p className={styles.selectedNotice}>Release selected for manual grab review.</p>}
+            {selected.decision.canGrabManually && selected.decision.reviewReasons.length > 0 && (
+              <label className={styles.checkbox}>
+                <input type="checkbox"
+                  checked={confirmedReview}
+                  onChange={this.onConfirmationChange}
+                />
+                I checked the title, coverage, and review reasons for this release.
+              </label>
+            )}
+            {selected.decision.canGrabManually && selected.guid && !grabbed && (
+              <button className={styles.primaryButton}
+                type="button"
+                disabled={isGrabbing || (selected.decision.reviewReasons.length > 0 && !confirmedReview)}
+                onClick={this.onGrab}
+              >
+                {isGrabbing ? 'Sending…' : 'Send to Download Client'}
+              </button>
+            )}
+            {selected.decision.canGrabManually && !selected.guid && (
+              <p className={styles.muted}>This indexer did not provide a release ID for a manual grab.</p>
+            )}
+            {grabError && <div className={styles.error}>{grabError}</div>}
+            {grabbed && <p className={styles.selectedNotice}>Sent to {grabbed.downloadClient}. Tracking ID: {grabbed.downloadId}</p>}
           </div>
         )}
       </section>
@@ -205,7 +270,8 @@ class MangaReleaseSearch extends Component {
 
 MangaReleaseSearch.propTypes = {
   manga: PropTypes.object.isRequired,
-  items: PropTypes.arrayOf(PropTypes.object).isRequired
+  items: PropTypes.arrayOf(PropTypes.object).isRequired,
+  onGrabbed: PropTypes.func.isRequired
 };
 
 export default MangaReleaseSearch;

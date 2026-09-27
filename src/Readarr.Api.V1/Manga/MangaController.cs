@@ -15,12 +15,18 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaService _manga;
         private readonly IMangaIndexerSearchService _search;
         private readonly IMangaInteractiveSearchService _interactiveSearch;
+        private readonly IMangaGrabService _grab;
 
-        public MangaController(IMangaService manga, IMangaIndexerSearchService search, IMangaInteractiveSearchService interactiveSearch)
+        public MangaController(
+            IMangaService manga,
+            IMangaIndexerSearchService search,
+            IMangaInteractiveSearchService interactiveSearch,
+            IMangaGrabService grab)
         {
             _manga = manga;
             _search = search;
             _interactiveSearch = interactiveSearch;
+            _grab = grab;
         }
 
         [HttpGet]
@@ -84,6 +90,40 @@ namespace Readarr.Api.V1.Manga
             catch (ArgumentException ex)
             {
                 return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("{id:int}/downloads")]
+        public ActionResult<IEnumerable<MangaDownload>> GetDownloads(int id)
+        {
+            try
+            {
+                return _grab.GetDownloads(id).ToList();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
+
+        [HttpPost("{id:int}/grab")]
+        public async Task<ActionResult<MangaDownload>> Grab(int id, [FromBody] MangaGrabRequest request)
+        {
+            try
+            {
+                return await _grab.Grab(id, request);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (MangaGrabValidationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception)
+            {
+                return StatusCode(502, "The download client could not accept this release. Check client health and try again.");
             }
         }
 

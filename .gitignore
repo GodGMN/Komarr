@@ -264,3 +264,7 @@ OUTREACH-*.md
 .idea/
 *.swp
 *.swo
+
+# Python fixture tooling
+__pycache__/
+*.pyc

@@ -128,36 +128,36 @@ namespace NzbDrone.Core.Backup
 
         public void Restore(string backupFileName)
         {
-            if (backupFileName.EndsWith(".zip"))
+            if (backupFileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                var restoredFile = false;
                 var temporaryPath = Path.Combine(_appFolderInfo.TempFolder, "komarr_backup_restore");
-
-                _archiveService.Extract(backupFileName, temporaryPath);
-
-                foreach (var file in _diskProvider.GetFiles(temporaryPath, false))
+                if (_diskProvider.FolderExists(temporaryPath))
                 {
-                    var fileName = Path.GetFileName(file);
-
-                    if (fileName.Equals("Config.xml", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        _diskProvider.MoveFile(file, _appFolderInfo.GetConfigPath(), true);
-                        restoredFile = true;
-                    }
-
-                    if (fileName.Equals("komarr.db", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        _diskProvider.MoveFile(file, _appFolderInfo.GetDatabaseRestore(), true);
-                        restoredFile = true;
-                    }
+                    _diskProvider.DeleteFolder(temporaryPath, true);
                 }
 
-                if (!restoredFile)
+                try
                 {
-                    throw new RestoreBackupFailedException(HttpStatusCode.NotFound, "Unable to restore database file from backup");
-                }
+                    _archiveService.Extract(backupFileName, temporaryPath);
+                    var files = _diskProvider.GetFiles(temporaryPath, false).ToList();
+                    var config = files.FirstOrDefault(file => Path.GetFileName(file).Equals("Config.xml", StringComparison.OrdinalIgnoreCase));
+                    var database = files.FirstOrDefault(file => Path.GetFileName(file).Equals("komarr.db", StringComparison.OrdinalIgnoreCase));
+                    if (config == null || database == null)
+                    {
+                        throw new RestoreBackupFailedException(HttpStatusCode.NotFound,
+                            "Backup must contain both config.xml and komarr.db before restore can begin");
+                    }
 
-                _diskProvider.DeleteFolder(temporaryPath, true);
+                    _diskProvider.MoveFile(database, _appFolderInfo.GetDatabaseRestore(), true);
+                    _diskProvider.MoveFile(config, _appFolderInfo.GetConfigPath(), true);
+                }
+                finally
+                {
+                    if (_diskProvider.FolderExists(temporaryPath))
+                    {
+                        _diskProvider.DeleteFolder(temporaryPath, true);
+                    }
+                }
 
                 return;
             }

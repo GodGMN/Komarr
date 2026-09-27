@@ -18,6 +18,7 @@ import MangaAddPage from 'Manga/MangaAddPage';
 import MangaDetailsPage from 'Manga/MangaDetailsPage';
 import MangaIndexPage from 'Manga/MangaIndexPage';
 import MangaLibraryScanPage from 'Manga/MangaLibraryScanPage';
+import MangaSetupPage from 'Manga/MangaSetupPage';
 import MangaWantedPage from 'Manga/MangaWantedPage';
 import NarratorDetailsPage from 'Narrator/NarratorDetailsPage';
 import AddNewItemConnector from 'Search/AddNewItemConnector';
@@ -107,6 +108,12 @@ function AppRoutes(props) {
         exact={true}
         path="/manga/library-scan"
         component={MangaLibraryScanPage}
+      />
+
+      <Route
+        exact={true}
+        path="/manga/setup"
+        component={MangaSetupPage}
       />
 
       <Route

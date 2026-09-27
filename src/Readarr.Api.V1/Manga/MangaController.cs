@@ -22,6 +22,7 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaWantedService _wanted;
         private readonly IMangaLibraryScanService _libraryScan;
         private readonly IMangaLibraryMappingService _libraryMapping;
+        private readonly IMangaSetupStatusService _setup;
 
         public MangaController(
             IMangaService manga,
@@ -33,7 +34,8 @@ namespace Readarr.Api.V1.Manga
             IMangaBlocklistService blocklist,
             IMangaWantedService wanted,
             IMangaLibraryScanService libraryScan,
-            IMangaLibraryMappingService libraryMapping)
+            IMangaLibraryMappingService libraryMapping,
+            IMangaSetupStatusService setup)
         {
             _manga = manga;
             _search = search;
@@ -45,6 +47,7 @@ namespace Readarr.Api.V1.Manga
             _wanted = wanted;
             _libraryScan = libraryScan;
             _libraryMapping = libraryMapping;
+            _setup = setup;
         }
 
         [HttpGet]
@@ -101,6 +104,12 @@ namespace Readarr.Api.V1.Manga
             {
                 return Conflict(ex.Message);
             }
+        }
+
+        [HttpGet("setup")]
+        public MangaSetupStatus GetSetupStatus()
+        {
+            return _setup.GetStatus();
         }
 
         [HttpGet("{id:int}")]

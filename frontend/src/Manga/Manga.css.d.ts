@@ -24,9 +24,19 @@ interface CssExports {
   'poster': string;
   'posterPlaceholder': string;
   'primaryButton': string;
+  'releaseCard': string;
+  'releaseList': string;
+  'releaseReason': string;
+  'releaseTitle': string;
+  'releaseTop': string;
+  'reviewPanel': string;
   'searchForm': string;
   'section': string;
   'select': string;
+  'selectedNotice': string;
+  'statusEligible': string;
+  'statusRejected': string;
+  'statusReview': string;
   'toolbar': string;
 }
 export const cssExports: CssExports;

@@ -5,6 +5,7 @@ import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import PageContent from 'Components/Page/PageContent';
 import PageContentBody from 'Components/Page/PageContentBody';
 import createAjaxRequest from 'Utilities/createAjaxRequest';
+import MangaReleaseSearch from './MangaReleaseSearch';
 import styles from './Manga.css';
 
 class MangaDetailsPage extends Component {
@@ -102,6 +103,8 @@ class MangaDetailsPage extends Component {
                   {manga.description && <p>{manga.description}</p>}
                 </div>
               </div>
+
+              <MangaReleaseSearch manga={manga} items={items} />
 
               <section className={styles.section}>
                 <h2>{manga.trackingMode === 1 ? 'Chapters' : 'Volumes'}</h2>

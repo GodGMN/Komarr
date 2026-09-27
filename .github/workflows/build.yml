@@ -28,9 +28,24 @@ jobs:
       - run: dotnet build src/Readarr.sln -c Release -p:Platform=Posix -v quiet
       - run: dotnet test src/NzbDrone.Core.Test/Readarr.Core.Test.csproj -c Release -p:Platform=Posix --filter 'FullyQualifiedName~UpdatePackageProviderFixture|FullyQualifiedName~MetadataSourceConnectivityCheckFixture|FullyQualifiedName~MetadataUserAgentFixture' -v quiet
 
-  container-smoke:
+  e2e-smoke:
+    name: E2E smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: docker build -f distribution/docker/Dockerfile -t komarr:ci .
       - run: ./scripts/smoke-docker.sh komarr:ci
+
+  playwright-smoke:
+    name: Playwright smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: yarn
+      - run: corepack yarn install --frozen-lockfile
+      - run: corepack yarn playwright install --with-deps chromium
+      - run: docker build -f distribution/docker/Dockerfile -t komarr:ci .
+      - run: ./scripts/smoke-docker.sh komarr:ci --browser

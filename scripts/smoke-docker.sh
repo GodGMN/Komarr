@@ -2,6 +2,7 @@
 set -euo pipefail
 
 image=${1:-komarr:local}
+run_browser=${2:-}
 name="komarr-smoke-$$"
 data_dir=$(mktemp -d)
 container_running=0
@@ -88,6 +89,9 @@ PY
 
 start_container
 check_api save
+if [[ "$run_browser" == "--browser" ]]; then
+  node scripts/smoke-browser.mjs "$base_url"
+fi
 docker stop "$name" >/dev/null
 container_running=0
 start_container

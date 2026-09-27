@@ -125,6 +125,7 @@
     "jsdom": "26.1.0",
     "loader-utils": "^3.2.1",
     "mini-css-extract-plugin": "2.9.1",
+    "playwright": "1.55.0",
     "postcss": "8.4.47",
     "postcss-color-function": "4.1.0",
     "postcss-loader": "7.3.0",

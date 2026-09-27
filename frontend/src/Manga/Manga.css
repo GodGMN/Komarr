@@ -197,6 +197,82 @@
   line-height: 1.9;
 }
 
+.releaseList {
+  display: grid;
+  gap: 12px;
+}
+
+.releaseCard,
+.reviewPanel {
+  padding: 16px;
+  border: 1px solid #3b454d;
+  border-radius: 6px;
+  background: #20282e;
+}
+
+.releaseTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.releaseTitle {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.releaseCard p {
+  margin: 6px 0 12px;
+}
+
+.releaseReason {
+  line-height: 1.45;
+}
+
+.statusEligible,
+.statusReview,
+.statusRejected {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.statusEligible {
+  background: #1e5d43;
+  color: #b8f5d8;
+}
+
+.statusReview {
+  background: #665027;
+  color: #ffe2a2;
+}
+
+.statusRejected {
+  background: #5e3434;
+  color: #ffd3d3;
+}
+
+.reviewPanel {
+  margin-top: 18px;
+  border-color: #30bc84;
+}
+
+.reviewPanel ul {
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+.selectedNotice {
+  color: #b8f5d8;
+  font-weight: 600;
+}
+
 .error {
   margin: 14px 0;
   padding: 12px;
@@ -221,5 +297,9 @@
 
   .searchForm .primaryButton {
     margin-top: 10px;
+  }
+
+  .releaseTop {
+    display: block;
   }
 }

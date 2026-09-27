@@ -49,6 +49,16 @@ try {
   await page.route(/\/api\/v1\/manga\/123\/downloads$/, route => reply(route, [
     { id: 98, releaseTitle: 'BLAME! v02', downloadClient: 'qBittorrent', status: 2 }
   ]));
+  await page.route(/\/api\/v1\/manga\/123\/history$/, route => reply(route, [
+    { id: 50, date: '2026-09-27T05:00:00Z', releaseTitle: 'BLAME! v02', message: 'Imported BLAME! - v02.cbz.' }
+  ]));
+  await page.route(/\/api\/v1\/manga\/123\/blocklist$/, route => reply(route, [
+    { id: 60, releaseTitle: 'BLAME! v99', reason: 'Download client reported that this release failed.' }
+  ]));
+  await page.route(/\/api\/v1\/manga\/123\/blocklist\/60$/, route => {
+    assert.equal(route.request().method(), 'DELETE');
+    return route.fulfill({ status: 204 });
+  });
   await page.route(/\/api\/v1\/manga\/123\/downloads\/98\/files$/, route => reply(route, [
     { id: 1, path: '/downloads/BLAME! v02.cbz', status: 3, coveredItemIds: [11] },
     { id: 2, path: '/downloads/BLAME! 03.cbz', status: 1, coveredItemIds: [],
@@ -84,6 +94,9 @@ try {
   await page.getByText('BLAME! v02.cbz').waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /BLAME! v02.cbz · Imported/);
   assert.match(await page.locator('body').innerText(), /BLAME! 03.cbz · Manual review/);
+  assert.match(await page.locator('body').innerText(), /Imported BLAME! - v02.cbz/);
+  await page.getByRole('button', { name: 'Clear Blocklist Entry' }).click();
+  await page.getByText('No failed releases are blocklisted.').waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: 'Search Releases' }).click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: 'Review Release' }).first().click();

@@ -15,6 +15,8 @@ namespace NzbDrone.Core.Manga
         private readonly IMangaDownloadFileRepository _files;
         private readonly IMangaDownloadFileIdentifier _identifier;
         private readonly IMangaImportService _imports;
+        private readonly IMangaHistoryService _history;
+        private readonly IMangaBlocklistService _blocklist;
         private readonly IProvideDownloadClient _clients;
         private readonly IDiskProvider _disk;
         private readonly Logger _logger;
@@ -24,6 +26,8 @@ namespace NzbDrone.Core.Manga
             IMangaDownloadFileRepository files,
             IMangaDownloadFileIdentifier identifier,
             IMangaImportService imports,
+            IMangaHistoryService history,
+            IMangaBlocklistService blocklist,
             IProvideDownloadClient clients,
             IDiskProvider disk,
             Logger logger)
@@ -32,6 +36,8 @@ namespace NzbDrone.Core.Manga
             _files = files;
             _identifier = identifier;
             _imports = imports;
+            _history = history;
+            _blocklist = blocklist;
             _clients = clients;
             _disk = disk;
             _logger = logger;
@@ -56,7 +62,23 @@ namespace NzbDrone.Core.Manga
                         try
                         {
                             var item = clientItems.FirstOrDefault(value => string.Equals(value.DownloadId, download.DownloadId, StringComparison.OrdinalIgnoreCase));
-                            if (item == null || item.Status != DownloadItemStatus.Completed || item.OutputPath.IsEmpty)
+                            if (item == null)
+                            {
+                                continue;
+                            }
+
+                            if (item.Status == DownloadItemStatus.Failed)
+                            {
+                                download.Status = MangaDownloadStatus.Failed;
+                                download.Error = "Download client reported that this release failed.";
+                                download.LastUpdated = DateTime.UtcNow;
+                                _downloads.Update(download);
+                                _blocklist.Block(download, download.Error);
+                                _history.Record(download, MangaHistoryEventType.DownloadFailed, download.Error);
+                                continue;
+                            }
+
+                            if (item.Status != DownloadItemStatus.Completed || item.OutputPath.IsEmpty)
                             {
                                 continue;
                             }
@@ -126,6 +148,10 @@ namespace NzbDrone.Core.Manga
             download.Status = MangaDownloadStatus.Completed;
             download.LastUpdated = DateTime.UtcNow;
             _downloads.Update(download);
+            _history.Record(
+                download,
+                MangaHistoryEventType.DownloadCompleted,
+                $"Client completed download; identified {identified.Count} file(s).");
         }
     }
 }

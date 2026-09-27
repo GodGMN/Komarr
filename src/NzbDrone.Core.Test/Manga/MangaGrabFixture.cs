@@ -22,6 +22,8 @@ namespace NzbDrone.Core.Test.Manga
         private Mock<IMangaService> _manga;
         private Mock<IMangaIndexerSearchService> _indexers;
         private Mock<IMangaDownloadRepository> _downloads;
+        private Mock<IMangaHistoryService> _history;
+        private Mock<IMangaBlocklistService> _blocklist;
         private Mock<IProvideDownloadClient> _clients;
         private Mock<IDownloadClientStatusService> _clientStatus;
         private Mock<IEventAggregator> _events;
@@ -45,6 +47,8 @@ namespace NzbDrone.Core.Test.Manga
             _downloads.Setup(x => x.GetByMangaId(7)).Returns(new MangaDownload[0]);
             _downloads.Setup(x => x.Insert(It.IsAny<MangaDownload>())).Returns<MangaDownload>(download => download);
             _downloads.Setup(x => x.Update(It.IsAny<MangaDownload>())).Returns<MangaDownload>(download => download);
+            _history = new Mock<IMangaHistoryService>();
+            _blocklist = new Mock<IMangaBlocklistService>();
             _clients = new Mock<IProvideDownloadClient>();
             _clientStatus = new Mock<IDownloadClientStatusService>();
             _events = new Mock<IEventAggregator>();
@@ -54,6 +58,8 @@ namespace NzbDrone.Core.Test.Manga
                 _manga.Object,
                 fileItems.Object,
                 _downloads.Object,
+                _history.Object,
+                _blocklist.Object,
                 _indexers.Object,
                 new MangaReleaseParser(),
                 new MangaReleaseMatcher(),
@@ -83,6 +89,7 @@ namespace NzbDrone.Core.Test.Manga
                 book.Release == release && book.ReleaseSource == ReleaseSourceType.InteractiveSearch), null), Times.Once());
             _downloads.Verify(x => x.Update(It.Is<MangaDownload>(download => download.DownloadId == trackingId)), Times.Once());
             _clientStatus.Verify(x => x.RecordSuccess(2), Times.Once());
+            _history.Verify(x => x.Record(It.IsAny<MangaDownload>(), MangaHistoryEventType.Grabbed, It.IsAny<string>(), null), Times.Once());
         }
 
         [Test]
@@ -141,6 +148,8 @@ namespace NzbDrone.Core.Test.Manga
             stored.Status.Should().Be(MangaDownloadStatus.Failed);
             stored.Error.Should().NotContain("private-value");
             _clientStatus.Verify(x => x.RecordFailure(2), Times.Once());
+            _history.Verify(x => x.Record(It.IsAny<MangaDownload>(), MangaHistoryEventType.GrabFailed, It.IsAny<string>(), null), Times.Once());
+            _blocklist.Verify(x => x.Block(It.IsAny<MangaDownload>(), It.IsAny<string>()), Times.Never());
         }
 
         [Test]
@@ -158,6 +167,19 @@ namespace NzbDrone.Core.Test.Manga
 
             await action.Should().ThrowAsync<MangaGrabValidationException>().WithMessage("*already sent*");
             client.Verify(x => x.Download(It.IsAny<RemoteBook>(), null), Times.Never());
+        }
+
+        [Test]
+        public async Task Failed_release_must_be_cleared_from_blocklist_before_retry()
+        {
+            var release = NewRelease("BLAME! v01", DownloadProtocol.Torrent);
+            SetupRelease(release);
+            _blocklist.Setup(value => value.IsBlocked(7, release.IndexerId, release.Guid)).Returns(true);
+
+            Func<Task> action = async () => await _service.Grab(7, NewRequest(release));
+
+            await action.Should().ThrowAsync<MangaGrabValidationException>().WithMessage("*blocklisted*");
+            _downloads.Verify(value => value.Insert(It.IsAny<MangaDownload>()), Times.Never());
         }
 
         [Test]

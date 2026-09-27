@@ -137,4 +137,46 @@ namespace NzbDrone.Core.Manga
             return Query(x => x.MangaDownloadId == downloadId);
         }
     }
+
+    public interface IMangaHistoryRepository : IBasicRepository<MangaHistory>
+    {
+        IEnumerable<MangaHistory> GetByMangaId(int mangaId);
+    }
+
+    public class MangaHistoryRepository : BasicRepository<MangaHistory>, IMangaHistoryRepository
+    {
+        public MangaHistoryRepository(IMainDatabase database, IEventAggregator eventAggregator)
+            : base(database, eventAggregator)
+        {
+        }
+
+        public IEnumerable<MangaHistory> GetByMangaId(int mangaId)
+        {
+            return Query(x => x.MangaId == mangaId);
+        }
+    }
+
+    public interface IMangaBlocklistRepository : IBasicRepository<MangaBlocklist>
+    {
+        IEnumerable<MangaBlocklist> GetByMangaId(int mangaId);
+        MangaBlocklist FindRelease(int mangaId, int indexerId, string releaseGuid);
+    }
+
+    public class MangaBlocklistRepository : BasicRepository<MangaBlocklist>, IMangaBlocklistRepository
+    {
+        public MangaBlocklistRepository(IMainDatabase database, IEventAggregator eventAggregator)
+            : base(database, eventAggregator)
+        {
+        }
+
+        public IEnumerable<MangaBlocklist> GetByMangaId(int mangaId)
+        {
+            return Query(x => x.MangaId == mangaId);
+        }
+
+        public MangaBlocklist FindRelease(int mangaId, int indexerId, string releaseGuid)
+        {
+            return Query(x => x.MangaId == mangaId && x.IndexerId == indexerId && x.ReleaseGuid == releaseGuid).FirstOrDefault();
+        }
+    }
 }

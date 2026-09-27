@@ -24,6 +24,7 @@ namespace NzbDrone.Core.Test.Manga
         private Mock<IMangaDownloadFileRepository> _downloadFiles;
         private Mock<IDiskProvider> _disk;
         private Mock<IConfigService> _config;
+        private Mock<IMangaHistoryService> _history;
         private MangaImportService _service;
         private MangaDownload _download;
         private MangaDownloadFile _file;
@@ -64,6 +65,7 @@ namespace NzbDrone.Core.Test.Manga
             _disk.Setup(value => value.FileGetLastWrite(Target)).Returns(DateTime.UtcNow);
             _config = new Mock<IConfigService>();
             _config.SetupGet(value => value.CopyUsingHardlinks).Returns(true);
+            _history = new Mock<IMangaHistoryService>();
             _download = new MangaDownload { Id = 2, MangaId = 7, Protocol = DownloadProtocol.Torrent };
             _service = new MangaImportService(
                 _manga.Object,
@@ -72,6 +74,7 @@ namespace NzbDrone.Core.Test.Manga
                 _downloadFiles.Object,
                 _disk.Object,
                 _config.Object,
+                _history.Object,
                 LogManager.GetCurrentClassLogger());
         }
 
@@ -90,6 +93,7 @@ namespace NzbDrone.Core.Test.Manga
             _coverage.Verify(value => value.Insert(It.Is<MangaFileItem>(link => link.MangaFileId == 43 && link.MangaItemId == 11)), Times.Once());
             _file.Status.Should().Be(MangaDownloadFileStatus.Imported);
             _file.MangaFileId.Should().Be(43);
+            _history.Verify(value => value.Record(_download, MangaHistoryEventType.Imported, It.IsAny<string>(), _file), Times.Once());
         }
 
         [Test]
@@ -114,6 +118,7 @@ namespace NzbDrone.Core.Test.Manga
             _file.Status.Should().Be(MangaDownloadFileStatus.ManualReview);
             _file.Reason.Should().Contain("outside");
             _disk.Verify(value => value.CopyFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+            _history.Verify(value => value.Record(_download, MangaHistoryEventType.NeedsReview, It.IsAny<string>(), _file), Times.Once());
         }
 
         [Test]

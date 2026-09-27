@@ -17,19 +17,25 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaInteractiveSearchService _interactiveSearch;
         private readonly IMangaGrabService _grab;
         private readonly IMangaDownloadFileRepository _downloadFiles;
+        private readonly IMangaHistoryService _history;
+        private readonly IMangaBlocklistService _blocklist;
 
         public MangaController(
             IMangaService manga,
             IMangaIndexerSearchService search,
             IMangaInteractiveSearchService interactiveSearch,
             IMangaGrabService grab,
-            IMangaDownloadFileRepository downloadFiles)
+            IMangaDownloadFileRepository downloadFiles,
+            IMangaHistoryService history,
+            IMangaBlocklistService blocklist)
         {
             _manga = manga;
             _search = search;
             _interactiveSearch = interactiveSearch;
             _grab = grab;
             _downloadFiles = downloadFiles;
+            _history = history;
+            _blocklist = blocklist;
         }
 
         [HttpGet]
@@ -119,6 +125,24 @@ namespace Readarr.Api.V1.Manga
 
             var download = _grab.GetDownloads(id).FirstOrDefault(value => value.Id == downloadId);
             return download == null ? NotFound() : _downloadFiles.GetByDownloadId(downloadId).ToList();
+        }
+
+        [HttpGet("{id:int}/history")]
+        public ActionResult<IEnumerable<MangaHistory>> GetHistory(int id)
+        {
+            return _manga.Find(id) == null ? NotFound() : _history.GetByMangaId(id).ToList();
+        }
+
+        [HttpGet("{id:int}/blocklist")]
+        public ActionResult<IEnumerable<MangaBlocklist>> GetBlocklist(int id)
+        {
+            return _manga.Find(id) == null ? NotFound() : _blocklist.GetByMangaId(id).ToList();
+        }
+
+        [HttpDelete("{id:int}/blocklist/{blockId:int}")]
+        public IActionResult Unblock(int id, int blockId)
+        {
+            return _manga.Find(id) == null || !_blocklist.Unblock(id, blockId) ? NotFound() : NoContent();
         }
 
         [HttpPost("{id:int}/grab")]

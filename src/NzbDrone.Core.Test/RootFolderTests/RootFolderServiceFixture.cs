@@ -31,12 +31,10 @@ namespace NzbDrone.Core.Test.RootFolderTests
                   .Setup(s => s.All())
                   .Returns(new List<RootFolder>());
 
-            // GetDetails enumerates unmapped folders, so every path that adds,
-            // updates or reads a root folder touches these two.
+            // GetDetails lists direct children when reading root-folder details.
             Mocker.GetMock<IDiskProvider>()
                   .Setup(m => m.GetDirectories(It.IsAny<string>()))
                   .Returns(Array.Empty<string>());
-
         }
 
         private void WithFolders(params string[] folders)

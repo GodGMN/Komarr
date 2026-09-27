@@ -32,7 +32,7 @@ namespace NzbDrone.Core.Manga
         private static readonly Regex BatchSuffix = New(@"\s+batch\s*$");
         private static readonly Regex AmbiguousGroup = New(@"^(?:batch|digital|english|japanese|raw|scanlation)$");
         private static readonly Regex AmbiguousTitle = New(@"\b(?:pack|bundle|dump)\b");
-        private static readonly Regex FileExtension = New(@"\.(?:cbz|cbr|pdf|zip|rar|7z)$");
+        private static readonly Regex FileExtension = New(@"\.(?:cbz|cbr|epub|pdf|zip|rar|7z)$");
         private static readonly Regex LanguageTag = New(@"(?:\[|\()(?<language>English|Japanese|Spanish|French|German|Italian|Portuguese|Korean|Chinese)(?:\]|\))");
         private static readonly Regex DigitalSource = New(@"\bdigital\b");
         private static readonly Regex ScanlationSource = New(@"\bscanlat(?:ion|ed)\b");

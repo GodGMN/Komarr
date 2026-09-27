@@ -46,7 +46,14 @@ try {
     { id: 10, mangaId: 123, type: 0, numberText: '1', monitored: true }
   ]));
   await page.route(/\/api\/v1\/manga\/123\/files$/, route => reply(route, []));
-  await page.route(/\/api\/v1\/manga\/123\/downloads$/, route => reply(route, []));
+  await page.route(/\/api\/v1\/manga\/123\/downloads$/, route => reply(route, [
+    { id: 98, releaseTitle: 'BLAME! v02', downloadClient: 'qBittorrent', status: 2 }
+  ]));
+  await page.route(/\/api\/v1\/manga\/123\/downloads\/98\/files$/, route => reply(route, [
+    { id: 1, path: '/downloads/BLAME! v02.cbz', status: 0, coveredItemIds: [11] },
+    { id: 2, path: '/downloads/BLAME! 03.cbz', status: 1, coveredItemIds: [],
+      reason: 'Bare numbers have no explicit volume or chapter token.' }
+  ]));
   await page.route(/\/api\/v1\/manga\/123\/search\/decisions/, route => reply(route, {
     mangaId: 123, itemId: 10, queries: ['BLAME!'], total: 2, indexerErrors: {},
     releases: [{
@@ -74,6 +81,8 @@ try {
       downloadClient: 'qBittorrent', downloadId: 'fixture-hash', status: 1 });
   });
   await page.goto(`${baseUrl}/manga/123`, { waitUntil: 'networkidle' });
+  await page.getByText('BLAME! v02.cbz').waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /BLAME! 03.cbz · Manual review/);
   await page.getByRole('button', { name: 'Search Releases' }).click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: 'Review Release' }).first().click();

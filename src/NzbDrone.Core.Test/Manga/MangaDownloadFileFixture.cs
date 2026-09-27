@@ -121,6 +121,7 @@ namespace NzbDrone.Core.Test.Manga
                 downloads.Object,
                 files.Object,
                 _identifier,
+                new Mock<IMangaImportService>().Object,
                 clients.Object,
                 _disk.Object,
                 LogManager.GetCurrentClassLogger());

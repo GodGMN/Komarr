@@ -80,6 +80,18 @@ namespace NzbDrone.Core.Test.Manga
             result.Folders.Single().Files.Should().BeEmpty();
         }
 
+        [Test]
+        public void Folder_preview_rejects_paths_outside_configured_root_children()
+        {
+            var disk = NewDisk();
+            var service = NewService(disk.Object, new MangaModel[0]);
+
+            System.Action action = () => service.ScanFolder("/outside/Series");
+
+            action.Should().Throw<KeyNotFoundException>();
+            disk.Verify(value => value.GetFiles(It.IsAny<string>(), false), Times.Never());
+        }
+
         private static Mock<IDiskProvider> NewDisk()
         {
             var disk = new Mock<IDiskProvider>();

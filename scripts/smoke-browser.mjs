@@ -27,6 +27,9 @@ try {
   await page.goto(`${baseUrl}/manga/add`, { waitUntil: 'networkidle' });
   await page.getByRole('searchbox', { name: 'Search manga' }).waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /AniList.*exact manga/);
+  await page.goto(`${baseUrl}/manga/add?folderPath=${encodeURIComponent('/manga/BLAME!')}`, { waitUntil: 'networkidle' });
+  assert.equal(await page.getByRole('searchbox', { name: 'Search manga' }).inputValue(), 'BLAME!');
+  assert.match(await page.locator('body').innerText(), /Existing folder: \/manga\/BLAME!/);
 
   await page.goto(`${baseUrl}/settings/quality`, { waitUntil: 'networkidle' });
   await page.getByText('Manga Quality').first().waitFor({ timeout: 30000 });
@@ -38,6 +41,9 @@ try {
     contentType: 'application/json',
     body: JSON.stringify(data)
   });
+  await page.route(/\/api\/v1\/manga$/, route => reply(route, [
+    { id: 123, aniListId: 30149, preferredTitle: 'BLAME!', monitored: true }
+  ]));
   await page.route(/\/api\/v1\/manga\/library-scan$/, route => reply(route, {
     rootsScanned: 1,
     truncated: false,
@@ -49,10 +55,29 @@ try {
         unitType: 0, startNumber: '01', endNumber: '01' }]
     }]
   }));
+  await page.route(/\/api\/v1\/manga\/library-scan\/preview/, route => reply(route, {
+    folderPath: '/manga/BLAME!', mangaId: 123, mangaTitle: 'BLAME!', truncated: false,
+    files: [
+      { path: '/manga/BLAME!/v01.cbz', name: 'v01.cbz', suggestedNumbers: ['01'], registered: false },
+      { path: '/manga/BLAME!/unknown.cbz', name: 'unknown.cbz', suggestedNumbers: [],
+        warning: 'Filename needs manual confirmation.', registered: false }
+    ]
+  }));
+  await page.route(/\/api\/v1\/manga\/library-scan\/map$/, route => {
+    const request = route.request().postDataJSON();
+    assert.equal(request.mangaId, 123);
+    assert.equal(request.files.length, 1);
+    assert.deepEqual(request.files[0].numbers, ['01']);
+    return reply(route, { mangaId: 123, filesRegistered: 1, itemsCreated: 1, skippedFiles: [] });
+  });
   await page.goto(`${baseUrl}/manga/library-scan`, { waitUntil: 'networkidle' });
   await page.getByText(/Read-only inventory of configured roots/).waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /1 unmapped/);
   assert.match(await page.locator('body').innerText(), /v01.cbz · Volume 01/);
+  await page.getByRole('button', { name: 'Review File Mapping' }).click();
+  await page.getByText('Filename needs manual confirmation.').waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: 'Register Selected Files' }).click();
+  await page.getByText(/Registered 1 files in place/).waitFor({ timeout: 30000 });
   await page.route(/\/api\/v1\/manga\/123$/, route => reply(route, {
     id: 123, aniListId: 30149, preferredTitle: 'BLAME!', titleRomaji: 'BLAME!',
     trackingMode: 0, monitored: true, aniListVolumeCount: 10

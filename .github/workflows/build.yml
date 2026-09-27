@@ -37,6 +37,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: docker build -f distribution/docker/Dockerfile -t komarr:ci .
       - run: ./scripts/smoke-docker.sh komarr:ci
+      - run: python3 scripts/smoke-populated-upgrade.py --new-image komarr:ci
 
   playwright-smoke:
     name: Playwright smoke

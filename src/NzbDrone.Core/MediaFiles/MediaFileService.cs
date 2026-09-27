@@ -5,10 +5,8 @@ using System.Linq;
 using NLog;
 using NzbDrone.Common;
 using NzbDrone.Core.Books.Events;
-using NzbDrone.Core.Datastore.Events;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
-using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.MediaFiles
 {
@@ -36,8 +34,7 @@ namespace NzbDrone.Core.MediaFiles
 
     public class MediaFileService : IMediaFileService,
         IHandle<AuthorMovedEvent>,
-        IHandleAsync<BookDeletedEvent>,
-        IHandleAsync<ModelEvent<RootFolder>>
+        IHandleAsync<BookDeletedEvent>
     {
         private readonly IEventAggregator _eventAggregator;
         private readonly IMediaFileRepository _mediaFileRepository;
@@ -229,15 +226,6 @@ namespace NzbDrone.Core.MediaFiles
             else
             {
                 _mediaFileRepository.UnlinkFilesByBook(message.Book.Id);
-            }
-        }
-
-        public void HandleAsync(ModelEvent<RootFolder> message)
-        {
-            if (message.Action == ModelAction.Deleted)
-            {
-                var files = GetFilesWithBasePath(message.Model.Path);
-                DeleteMany(files, DeleteMediaFileReason.Manual);
             }
         }
     }

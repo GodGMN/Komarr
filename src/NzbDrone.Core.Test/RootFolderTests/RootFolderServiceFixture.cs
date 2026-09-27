@@ -6,7 +6,6 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
-using NzbDrone.Core.Books;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
@@ -32,15 +31,10 @@ namespace NzbDrone.Core.Test.RootFolderTests
                   .Setup(s => s.All())
                   .Returns(new List<RootFolder>());
 
-            // GetDetails enumerates unmapped folders, so every path that adds,
-            // updates or reads a root folder touches these two.
+            // GetDetails lists direct children when reading root-folder details.
             Mocker.GetMock<IDiskProvider>()
                   .Setup(m => m.GetDirectories(It.IsAny<string>()))
                   .Returns(Array.Empty<string>());
-
-            Mocker.GetMock<IAuthorRepository>()
-                  .Setup(s => s.AllAuthorPaths())
-                  .Returns(new Dictionary<int, string>());
         }
 
         private void WithFolders(params string[] folders)
@@ -48,13 +42,6 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Mocker.GetMock<IDiskProvider>()
                   .Setup(m => m.GetDirectories(It.IsAny<string>()))
                   .Returns(folders);
-        }
-
-        private void WithAuthorPaths(params string[] paths)
-        {
-            Mocker.GetMock<IAuthorRepository>()
-                  .Setup(s => s.AllAuthorPaths())
-                  .Returns(paths.Select((p, i) => new { p, i }).ToDictionary(x => x.i, x => x.p));
         }
 
         private void WithNonExistingFolder()
@@ -117,41 +104,18 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Assert.Throws<UnauthorizedAccessException>(() => Subject.Add(new RootFolder { Path = @"C:\Music".AsOsAgnostic() }));
         }
 
-        // The Library Import wizard is driven entirely by this list — anything
-        // wrongly included becomes a row asking the user to pick an author for
-        // a folder that isn't one, and anything wrongly excluded is a folder
-        // they simply cannot import.
         [Test]
-        public void should_return_subfolders_not_claimed_by_an_author_as_unmapped()
+        public void should_return_subfolders_without_querying_book_tables()
         {
             var root = @"C:\Books".AsOsAgnostic();
             WithFolders(
                 Path.Combine(root, "Brandon Sanderson"),
                 Path.Combine(root, "Ursula K Le Guin"));
 
-            WithAuthorPaths(Path.Combine(root, "Brandon Sanderson"));
-
             var unmapped = Subject.GetUnmappedFolders(root);
 
-            unmapped.Should().HaveCount(1);
-            unmapped[0].Name.Should().Be("Ursula K Le Guin");
-            unmapped[0].Path.Should().Be(Path.Combine(root, "Ursula K Le Guin"));
-        }
-
-        // Author paths are stored without a trailing separator but nothing
-        // guarantees that, and a folder that failed to match on that alone
-        // would show up in the wizard as importable when it is already an
-        // author — producing a duplicate. Case is deliberately not asserted
-        // here: PathEqualityComparer only folds case on Windows, which is the
-        // correct behaviour for case-sensitive Unix filesystems.
-        [Test]
-        public void should_match_author_paths_regardless_of_trailing_separator()
-        {
-            var root = @"C:\Books".AsOsAgnostic();
-            WithFolders(Path.Combine(root, "Brandon Sanderson"));
-            WithAuthorPaths(Path.Combine(root, "Brandon Sanderson") + Path.DirectorySeparatorChar);
-
-            Subject.GetUnmappedFolders(root).Should().BeEmpty();
+            unmapped.Should().HaveCount(2);
+            unmapped.Select(x => x.Path).Should().Contain(Path.Combine(root, "Ursula K Le Guin"));
         }
 
         [TestCase("$RECYCLE.BIN")]

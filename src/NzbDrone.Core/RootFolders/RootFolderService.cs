@@ -8,13 +8,6 @@ using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnsureThat;
 using NzbDrone.Common.Extensions;
-using NzbDrone.Core.Books;
-using NzbDrone.Core.Datastore.Events;
-using NzbDrone.Core.MediaFiles;
-using NzbDrone.Core.MediaFiles.Commands;
-using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Messaging.Events;
-using NzbDrone.Core.RemotePathMappings;
 
 namespace NzbDrone.Core.RootFolders
 {
@@ -33,10 +26,9 @@ namespace NzbDrone.Core.RootFolders
         string GetBestRootFolderPath(string path, List<RootFolder> allRootFolders);
     }
 
-    public class RootFolderService : IRootFolderService, IHandle<ModelEvent<RemotePathMapping>>
+    public class RootFolderService : IRootFolderService
     {
-        // Folders that live alongside author folders in a root but are never an
-        // author. Matched case-insensitively against the leaf directory name.
+        // Ignore system folders while listing direct children of a root.
         // ".caltrash" is Calibre's recycle bin and shows up in Calibre-backed
         // root folders.
         private static readonly HashSet<string> SpecialFolders = new (StringComparer.OrdinalIgnoreCase)
@@ -54,25 +46,15 @@ namespace NzbDrone.Core.RootFolders
         };
 
         private readonly IRootFolderRepository _rootFolderRepository;
-        private readonly IAuthorRepository _authorRepository;
         private readonly IDiskProvider _diskProvider;
-        private readonly IManageCommandQueue _commandQueueManager;
         private readonly Logger _logger;
 
-        // Takes IAuthorRepository rather than IAuthorService deliberately:
-        // IAuthorService -> IBuildAuthorPaths -> IRootFolderService is a cycle
-        // DryIoc would refuse to resolve. The repository only needs the
-        // database, so it closes nothing.
         public RootFolderService(IRootFolderRepository rootFolderRepository,
-                                 IAuthorRepository authorRepository,
                                  IDiskProvider diskProvider,
-                                 IManageCommandQueue commandQueueManager,
                                  Logger logger)
         {
             _rootFolderRepository = rootFolderRepository;
-            _authorRepository = authorRepository;
             _diskProvider = diskProvider;
-            _commandQueueManager = commandQueueManager;
             _logger = logger;
         }
 
@@ -135,8 +117,6 @@ namespace NzbDrone.Core.RootFolders
             }
 
             _rootFolderRepository.Insert(rootFolder);
-
-            _commandQueueManager.Push(new RescanFoldersCommand(new List<string> { rootFolder.Path }, FilterFilesType.None, true, null));
 
             GetDetails(rootFolder);
 
@@ -204,13 +184,8 @@ namespace NzbDrone.Core.RootFolders
             return possibleRootFolder?.Path;
         }
 
-        // Every first-level subdirectory of the root that isn't already an
-        // author folder. This is what the Library Import wizard walks: one row
-        // per folder, each waiting to be paired with an OpenLibrary author.
-        //
-        // Note the comparison is against author paths, not author names — a
-        // folder counts as mapped once some author points at it, whatever it
-        // happens to be called on disk.
+        // This inherited response field is supplementary root-folder detail.
+        // Manga folder mapping uses the dedicated manga APIs.
         public List<UnmappedFolder> GetUnmappedFolders(string rootFolderPath)
         {
             Ensure.That(rootFolderPath, () => rootFolderPath).IsNotNullOrWhiteSpace();
@@ -221,10 +196,7 @@ namespace NzbDrone.Core.RootFolders
                 return new List<UnmappedFolder>();
             }
 
-            var authorPaths = _authorRepository.AllAuthorPaths().Select(x => x.Value).ToList();
-
             return _diskProvider.GetDirectories(rootFolderPath)
-                .Except(authorPaths, PathEqualityComparer.Instance)
                 .Select(path => new UnmappedFolder
                 {
                     Name = new DirectoryInfo(path).Name,
@@ -269,21 +241,6 @@ namespace NzbDrone.Core.RootFolders
             if (!completed)
             {
                 _logger.Warn("Timed out reading details for root folder {0}; free space and unmapped folders may be incomplete", rootFolder.Path);
-            }
-        }
-
-        public void Handle(ModelEvent<RemotePathMapping> message)
-        {
-            var commands = All()
-                .Where(x => x.IsCalibreLibrary &&
-                       x.CalibreSettings.Host == message.Model.Host &&
-                       x.Path.StartsWith(message.Model.LocalPath))
-                .Select(x => new RescanFoldersCommand(new List<string> { x.Path }, FilterFilesType.None, true, null))
-                .ToList();
-
-            if (commands.Any())
-            {
-                _commandQueueManager.PushMany(commands);
             }
         }
     }

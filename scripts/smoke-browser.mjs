@@ -42,10 +42,41 @@ try {
   assert.equal(await page.getByRole('searchbox', { name: 'Search manga' }).inputValue(), 'BLAME!');
   assert.match(await page.locator('body').innerText(), /Existing folder: \/manga\/BLAME!/);
 
-  await page.goto(`${baseUrl}/settings/quality`, { waitUntil: 'networkidle' });
+  let savedPolicy = {};
+  await page.route(/\/api\/v1\/manga$/, route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 123, aniListId: 30149, preferredTitle: 'BLAME!', monitored: true }])
+  }));
+  await page.route(/\/api\/v1\/manga\/123$/, route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: 123, aniListId: 30149, preferredTitle: 'BLAME!', monitored: true,
+      qualityPolicy: savedPolicy })
+  }));
+  await page.route(/\/api\/v1\/manga\/123\/quality-policy$/, route => {
+    savedPolicy = route.request().postDataJSON();
+    assert.deepEqual(savedPolicy.allowedContainers, ['CBZ', 'ZIP']);
+    assert.deepEqual(savedPolicy.sourcePreference, ['Raw', 'Scanlation', 'Digital']);
+    assert.equal(savedPolicy.upgradeCutoffSource, 'Digital');
+    assert.equal(savedPolicy.minimumSeeders, 4);
+    assert.equal(savedPolicy.minimumSizeBytes, 15 * 1024 * 1024);
+    return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ id: 123, preferredTitle: 'BLAME!', qualityPolicy: savedPolicy }) });
+  });
+  await page.goto(`${baseUrl}/settings/quality?mangaId=123`, { waitUntil: 'networkidle' });
   await page.getByText('Manga Quality').first().waitFor({ timeout: 30000 });
   const qualityPage = await page.locator('body').innerText();
   assert.doesNotMatch(qualityPage, /Unknown Audio|book duration|Kilobits Per Second/);
+  await page.getByLabel('Containers').fill('CBZ, ZIP');
+  await page.getByLabel('Source preference, lowest to highest').fill('Raw, Scanlation, Digital');
+  await page.getByLabel('Stop upgrading at').selectOption('Digital');
+  await page.getByLabel('Minimum size (MiB)').fill('15');
+  await page.getByLabel('Minimum torrent seeders').fill('4');
+  await page.getByRole('button', { name: 'Save Manga Policy' }).click();
+  await page.getByText('Policy saved.').waitFor({ timeout: 30000 });
+  await page.reload({ waitUntil: 'networkidle' });
+  assert.equal(await page.getByLabel('Containers').inputValue(), 'CBZ, ZIP');
+  assert.equal(await page.getByLabel('Minimum torrent seeders').inputValue(), '4');
+  await saveScreenshot('manga-quality.png');
 
   const reply = (route, data) => route.fulfill({
     status: 200,
@@ -165,7 +196,7 @@ try {
       reason: 'Bare numbers have no explicit volume or chapter token.' }
   ]));
   await page.route(/\/api\/v1\/manga\/123\/search\/decisions/, route => reply(route, {
-    mangaId: 123, itemId: 10, queries: ['BLAME!'], total: 2, indexerErrors: {},
+    mangaId: 123, itemId: 10, queries: ['BLAME!'], total: 3, indexerErrors: {},
     releases: [{
       guid: 'fixture-release', indexerId: 1, indexer: 'Nyaa', title: 'BLAME! v01 [English]',
       size: 123456, seeders: 5, quality: 'Digital / English', container: 'CBZ',
@@ -182,6 +213,15 @@ try {
       matchedAlias: 'BLAME!', coveredItemIds: [10],
       decision: { canGrabManually: true, canGrabAutomatically: false,
         rejections: [], reviewReasons: ['Title match requires manual confirmation.'], evidence: [] }
+    }, {
+      guid: 'fixture-rejected', indexerId: 1, indexer: 'Nyaa', title: 'BLAME! v01 [CBR]',
+      size: 123456, seeders: 2, quality: 'Scanlation', container: 'CBR',
+      parsed: { unitType: 1, startNumberText: '01', endNumberText: '01', isPack: false,
+        confidence: 2, language: 'English', source: 'Scanlation', warnings: [] },
+      matchedAlias: 'BLAME!', coveredItemIds: [10],
+      decision: { canGrabManually: false, canGrabAutomatically: false,
+        rejections: ["Release container 'CBR' is not allowed.", 'Torrent has 2 seeders; 4 required.'],
+        reviewReasons: [], evidence: [] }
     }]
   }));
   await page.route(/\/api\/v1\/manga\/123\/grab$/, route => {
@@ -199,6 +239,7 @@ try {
   await saveScreenshot('manga-wanted.png');
   await page.getByRole('link', { name: 'Search Releases' }).first().click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /Release container 'CBR' is not allowed/);
   assert.equal(await page.getByRole('combobox', { name: 'Manga item' }).inputValue(), '10');
   await page.goto(`${baseUrl}/manga/123`, { waitUntil: 'networkidle' });
   await page.getByText('BLAME! v02.cbz').waitFor({ timeout: 30000 });
@@ -219,7 +260,7 @@ try {
   await page.getByRole('button', { name: 'Send to Download Client' }).click();
   await page.getByText('Sent to qBittorrent. Tracking ID: fixture-hash').waitFor({ timeout: 30000 });
   assert.match(await page.locator('body').innerText(), /BLAME! v01 \[English\] · qBittorrent · Sent/);
-  await page.getByRole('button', { name: 'Review Release' }).click();
+  await page.getByRole('button', { name: 'Review Release' }).first().click();
   assert.equal(await page.getByRole('button', { name: 'Send to Download Client' }).isDisabled(), true);
   await page.getByRole('checkbox', { name: /I checked the title/ }).check();
   assert.equal(await page.getByRole('button', { name: 'Send to Download Client' }).isEnabled(), true);

@@ -26,7 +26,7 @@ class MangaDetailsPage extends Component {
   constructor(props) {
     super(props);
     this.state = { manga: null, items: [], wanted: [], files: [], downloads: [], history: [], blocklist: [], downloadRevision: 0,
-      newItemNumber: '', isAddingItem: false, isSavingPolicy: false, isLoading: true, isRefreshing: false, error: null };
+      newItemNumber: '', isAddingItem: false, isLoading: true, isRefreshing: false, error: null };
   }
 
   componentDidMount() {
@@ -44,7 +44,6 @@ class MangaDetailsPage extends Component {
     this.addItemRequest?.abortRequest();
     this.monitorRequest?.abortRequest();
     this.wantedRequest?.abortRequest();
-    this.policyRequest?.abortRequest();
   }
 
   load = () => {
@@ -166,30 +165,9 @@ class MangaDetailsPage extends Component {
     });
   };
 
-  onUpgradePolicyChange = (event) => {
-    const { manga } = this.state;
-    const enabled = event.target.value === 'digital';
-    const policy = {
-      ...manga.qualityPolicy,
-      sourcePreference: enabled ? ['Raw', 'Scanlation', 'Digital'] : [],
-      upgradeCutoffSource: enabled ? 'Digital' : null
-    };
-    this.setState({ isSavingPolicy: true, error: null });
-    this.policyRequest = createAjaxRequest({
-      url: `/manga/${manga.id}/quality-policy`, method: 'PUT', dataType: 'json', data: JSON.stringify(policy)
-    });
-    this.policyRequest.request.then((updated) => {
-      this.setState({ manga: updated, isSavingPolicy: false });
-    }).catch((xhr) => {
-      if (!xhr.aborted) {
-        this.setState({ isSavingPolicy: false, error: 'Could not save the upgrade cutoff.' });
-      }
-    });
-  };
-
   render() {
     const { manga, items, wanted, files, downloads, history, blocklist, downloadRevision,
-      newItemNumber, isAddingItem, isSavingPolicy, isLoading, isRefreshing, error } = this.state;
+      newItemNumber, isAddingItem, isLoading, isRefreshing, error } = this.state;
     const title = manga?.preferredTitle || manga?.titleRomaji || 'Manga';
 
     return (
@@ -243,15 +221,7 @@ class MangaDetailsPage extends Component {
                 <p className={styles.muted}>
                   New missing items use the manga release checks automatically. Source upgrades are optional and keep the same language and edition.
                 </p>
-                <label htmlFor="mangaUpgradeCutoff">Source cutoff</label>
-                <select id="mangaUpgradeCutoff"
-                  value={manga.qualityPolicy?.upgradeCutoffSource === 'Digital' ? 'digital' : 'off'}
-                  disabled={isSavingPolicy}
-                  onChange={this.onUpgradePolicyChange}
-                >
-                  <option value="off">Off</option>
-                  <option value="digital">Raw → Scanlation → Digital; stop at Digital</option>
-                </select>
+                <Link to={`/settings/quality?mangaId=${manga.id}`}>Edit manga quality policy</Link>
               </section>
 
               <MangaReleaseSearch key={this.props.location.search || 'all'}

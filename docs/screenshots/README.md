@@ -6,6 +6,8 @@ These screenshots come from the reproducible Playwright smoke fixture. The sampl
 
 ![Manga detail with volume coverage and download history](manga-detail.png)
 
+![Manga quality policy for one title](manga-quality.png)
+
 ## Wanted volumes
 
 ![Wanted manga volumes with paged results](manga-wanted.png)

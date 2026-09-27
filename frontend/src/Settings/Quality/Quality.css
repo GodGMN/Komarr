@@ -1,0 +1,70 @@
+.intro {
+  max-width: 860px;
+  color: #a8b4bd;
+  line-height: 1.5;
+}
+
+.form {
+  max-width: 1040px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px 24px;
+}
+
+.field {
+  display: block;
+  margin: 16px 0;
+  max-width: 500px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 7px;
+  font-weight: 600;
+}
+
+.input {
+  padding: 8px 10px;
+  min-height: 39px;
+  width: 100%;
+  border: 1px solid #65717a;
+  border-radius: 4px;
+  background: #252d33;
+  color: #f5f7f8;
+}
+
+.help {
+  display: block;
+  margin-top: 6px;
+  color: #a8b4bd;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 22px 0;
+  gap: 14px;
+}
+
+.saveButton {
+  padding: 9px 16px;
+  border: 1px solid #239768;
+  border-radius: 4px;
+  background: #187650;
+  color: #f5f7f8;
+  cursor: pointer;
+}
+
+.saveButton:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #e48b8b;
+}

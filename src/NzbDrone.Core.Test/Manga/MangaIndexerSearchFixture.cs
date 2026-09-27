@@ -21,6 +21,7 @@ namespace NzbDrone.Core.Test.Manga
         {
             var queries = new List<string>();
             var indexer = new Mock<IIndexer>();
+            indexer.As<IMangaSearchIndexer>();
             indexer.SetupGet(x => x.SupportsSearch).Returns(true);
             indexer.SetupGet(x => x.Definition).Returns(new IndexerDefinition { Name = "Nyaa via Prowlarr", Implementation = "Torznab" });
             indexer.Setup(x => x.Fetch(It.IsAny<AuthorSearchCriteria>())).ReturnsAsync((AuthorSearchCriteria criteria) =>
@@ -49,11 +50,28 @@ namespace NzbDrone.Core.Test.Manga
         }
 
         [Test]
-        public async Task Does_not_query_non_torznab_indexers_or_titles_without_a_name()
+        public async Task Queries_native_manga_indexers_such_as_nyaa()
+        {
+            var indexer = new Mock<IIndexer>();
+            indexer.As<IMangaSearchIndexer>();
+            indexer.SetupGet(x => x.SupportsSearch).Returns(true);
+            indexer.SetupGet(x => x.Definition).Returns(new IndexerDefinition { Name = "Nyaa", Implementation = "Nyaa" });
+            indexer.Setup(x => x.Fetch(It.IsAny<AuthorSearchCriteria>())).ReturnsAsync(new List<ReleaseInfo>());
+            var factory = new Mock<IIndexerFactory>();
+            factory.Setup(x => x.InteractiveSearchEnabled(true)).Returns(new List<IIndexer> { indexer.Object });
+            var service = new MangaIndexerSearchService(factory.Object, LogManager.GetCurrentClassLogger());
+
+            await service.Search(new MangaModel { PreferredTitle = "Tokyo Ghoul" });
+
+            indexer.Verify(x => x.Fetch(It.IsAny<AuthorSearchCriteria>()), Times.Once());
+        }
+
+        [Test]
+        public async Task Does_not_query_indexers_without_manga_search_support_or_titles_without_a_name()
         {
             var indexer = new Mock<IIndexer>();
             indexer.SetupGet(x => x.SupportsSearch).Returns(true);
-            indexer.SetupGet(x => x.Definition).Returns(new IndexerDefinition { Implementation = "Nyaa" });
+            indexer.SetupGet(x => x.Definition).Returns(new IndexerDefinition { Implementation = "Gazelle" });
             var factory = new Mock<IIndexerFactory>();
             factory.Setup(x => x.InteractiveSearchEnabled(true)).Returns(new List<IIndexer> { indexer.Object });
             var service = new MangaIndexerSearchService(factory.Object, LogManager.GetCurrentClassLogger());

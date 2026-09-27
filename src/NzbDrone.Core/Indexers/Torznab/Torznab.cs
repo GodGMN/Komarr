@@ -13,7 +13,7 @@ using NzbDrone.Core.Validation;
 
 namespace NzbDrone.Core.Indexers.Torznab
 {
-    public class Torznab : HttpIndexerBase<TorznabSettings>
+    public class Torznab : HttpIndexerBase<TorznabSettings>, IMangaSearchIndexer
     {
         private readonly INewznabCapabilitiesProvider _capabilitiesProvider;
 

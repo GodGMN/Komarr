@@ -13,7 +13,7 @@ using NzbDrone.Core.Validation;
 
 namespace NzbDrone.Core.Indexers.Newznab
 {
-    public class Newznab : HttpIndexerBase<NewznabSettings>
+    public class Newznab : HttpIndexerBase<NewznabSettings>, IMangaSearchIndexer
     {
         private readonly INewznabCapabilitiesProvider _capabilitiesProvider;
 

@@ -8,11 +8,15 @@ import createAjaxRequest from 'Utilities/createAjaxRequest';
 import MangaReleaseSearch from './MangaReleaseSearch';
 import styles from './Manga.css';
 
+function downloadStatus(status) {
+  return ['Pending', 'Sent', 'Completed', 'Failed'][status] || 'Unknown';
+}
+
 class MangaDetailsPage extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { manga: null, items: [], files: [], isLoading: true, isRefreshing: false, error: null };
+    this.state = { manga: null, items: [], files: [], downloads: [], isLoading: true, isRefreshing: false, error: null };
   }
 
   componentDidMount() {
@@ -29,11 +33,12 @@ class MangaDetailsPage extends Component {
     this.requests = [
       createAjaxRequest({ url: `/manga/${id}`, method: 'GET', dataType: 'json' }),
       createAjaxRequest({ url: `/manga/${id}/items`, method: 'GET', dataType: 'json' }),
-      createAjaxRequest({ url: `/manga/${id}/files`, method: 'GET', dataType: 'json' })
+      createAjaxRequest({ url: `/manga/${id}/files`, method: 'GET', dataType: 'json' }),
+      createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' })
     ];
 
-    Promise.all(this.requests.map((request) => request.request)).then(([manga, items, files]) => {
-      this.setState({ manga, items: items || [], files: files || [], isLoading: false, error: null });
+    Promise.all(this.requests.map((request) => request.request)).then(([manga, items, files, downloads]) => {
+      this.setState({ manga, items: items || [], files: files || [], downloads: downloads || [], isLoading: false, error: null });
     }).catch((xhr) => {
       if (!xhr.aborted) {
         this.setState({ isLoading: false, error: xhr.status === 404 ? 'Manga not found.' : 'Could not load manga details.' });
@@ -54,8 +59,12 @@ class MangaDetailsPage extends Component {
     });
   };
 
+  onGrabbed = (download) => {
+    this.setState((state) => ({ downloads: [...state.downloads, download] }));
+  };
+
   render() {
-    const { manga, items, files, isLoading, isRefreshing, error } = this.state;
+    const { manga, items, files, downloads, isLoading, isRefreshing, error } = this.state;
     const title = manga?.preferredTitle || manga?.titleRomaji || 'Manga';
 
     return (
@@ -104,7 +113,23 @@ class MangaDetailsPage extends Component {
                 </div>
               </div>
 
-              <MangaReleaseSearch manga={manga} items={items} />
+              <MangaReleaseSearch manga={manga}
+                items={items}
+                onGrabbed={this.onGrabbed}
+              />
+
+              <section className={styles.section}>
+                <h2>Downloads</h2>
+                {downloads.length === 0 ?
+                  <p className={styles.muted}>No manga releases sent to a download client yet.</p> :
+                  <ul className={styles.list}>
+                    {downloads.map((download) => (
+                      <li key={download.id || download.downloadId}>
+                        {download.releaseTitle} · {download.downloadClient} · {downloadStatus(download.status)}
+                      </li>
+                    ))}
+                  </ul>}
+              </section>
 
               <section className={styles.section}>
                 <h2>{manga.trackingMode === 1 ? 'Chapters' : 'Volumes'}</h2>

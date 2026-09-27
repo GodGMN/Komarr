@@ -74,6 +74,32 @@ namespace NzbDrone.Core.Test.Manga
             Db.Single<MangaFile>().EditionLabel.Should().Be("Omnibus");
         }
 
+        [Test]
+        public void stores_download_client_identity_and_covered_items()
+        {
+            var manga = Db.Insert(NewManga());
+            Db.Insert(new MangaDownload
+            {
+                MangaId = manga.Id,
+                CoveredItemIds = new List<int> { 1, 2 },
+                IndexerId = 5,
+                Indexer = "Nyaa",
+                ReleaseGuid = "release-guid",
+                ReleaseTitle = "ONE PIECE v01-v02",
+                DownloadClientId = 3,
+                DownloadClient = "qBittorrent",
+                DownloadId = "torrent-hash",
+                Status = MangaDownloadStatus.Sent,
+                Added = DateTime.UtcNow
+            });
+
+            var stored = Db.Single<MangaDownload>();
+            stored.CoveredItemIds.Should().Equal(1, 2);
+            stored.DownloadId.Should().Be("torrent-hash");
+            stored.Status.Should().Be(MangaDownloadStatus.Sent);
+            Mocker.Resolve<MangaDownloadRepository>().FindByDownloadId(3, "torrent-hash").ReleaseGuid.Should().Be("release-guid");
+        }
+
         private static MangaModel NewManga()
         {
             return new MangaModel

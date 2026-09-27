@@ -46,8 +46,9 @@ try {
     { id: 10, mangaId: 123, type: 0, numberText: '1', monitored: true }
   ]));
   await page.route(/\/api\/v1\/manga\/123\/files$/, route => reply(route, []));
+  await page.route(/\/api\/v1\/manga\/123\/downloads$/, route => reply(route, []));
   await page.route(/\/api\/v1\/manga\/123\/search\/decisions/, route => reply(route, {
-    mangaId: 123, itemId: 10, queries: ['BLAME!'], total: 1, indexerErrors: {},
+    mangaId: 123, itemId: 10, queries: ['BLAME!'], total: 2, indexerErrors: {},
     releases: [{
       guid: 'fixture-release', indexerId: 1, indexer: 'Nyaa', title: 'BLAME! v01 [English]',
       size: 123456, seeders: 5, quality: 'Digital / English', container: 'CBZ',
@@ -56,13 +57,33 @@ try {
       matchedAlias: 'BLAME!', coveredItemIds: [10],
       decision: { canGrabManually: true, canGrabAutomatically: true,
         rejections: [], reviewReasons: [], evidence: ['ExactPreferred title match: BLAME!'] }
+    }, {
+      guid: 'fixture-review', indexerId: 1, indexer: 'Nyaa', title: 'BLAMR! v01 [English]',
+      size: 123456, seeders: 5, quality: 'English', container: 'CBZ',
+      parsed: { unitType: 1, startNumberText: '01', endNumberText: '01', isPack: false,
+        confidence: 2, language: 'English', source: null, warnings: [] },
+      matchedAlias: 'BLAME!', coveredItemIds: [10],
+      decision: { canGrabManually: true, canGrabAutomatically: false,
+        rejections: [], reviewReasons: ['Title match requires manual confirmation.'], evidence: [] }
     }]
   }));
+  await page.route(/\/api\/v1\/manga\/123\/grab$/, route => {
+    const request = route.request().postDataJSON();
+    assert.equal(request.guid, 'fixture-release');
+    return reply(route, { id: 99, releaseTitle: 'BLAME! v01 [English]',
+      downloadClient: 'qBittorrent', downloadId: 'fixture-hash', status: 1 });
+  });
   await page.goto(`${baseUrl}/manga/123`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Search Releases' }).click();
   await page.getByText('BLAME! v01 [English]').first().waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: 'Review Release' }).first().click();
+  await page.getByRole('button', { name: 'Send to Download Client' }).click();
+  await page.getByText('Sent to qBittorrent. Tracking ID: fixture-hash').waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /BLAME! v01 \[English\] · qBittorrent · Sent/);
   await page.getByRole('button', { name: 'Review Release' }).click();
-  await page.getByText('Release selected for manual grab review.').waitFor({ timeout: 30000 });
+  assert.equal(await page.getByRole('button', { name: 'Send to Download Client' }).isDisabled(), true);
+  await page.getByRole('checkbox', { name: /I checked the title/ }).check();
+  assert.equal(await page.getByRole('button', { name: 'Send to Download Client' }).isEnabled(), true);
   assert.match(await page.locator('body').innerText(), /Known items covered: Volume 1/);
   assert.equal(errors.length, 0, `Browser errors: ${errors.join('; ')}`);
   console.log('Playwright smoke: manga add, quality, and release review rendered without browser errors');

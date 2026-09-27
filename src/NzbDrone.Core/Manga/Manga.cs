@@ -20,6 +20,7 @@ namespace NzbDrone.Core.Manga
         public string PreferredTitle { get; set; }
         public string CleanTitle { get; set; }
         public List<string> Synonyms { get; set; } = new ();
+        public List<string> UserAliases { get; set; } = new ();
         public string Description { get; set; }
         public string Status { get; set; }
         public string Format { get; set; }

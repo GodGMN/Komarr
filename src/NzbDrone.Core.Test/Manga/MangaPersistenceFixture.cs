@@ -23,6 +23,7 @@ namespace NzbDrone.Core.Test.Manga
             stored.Synonyms.Should().Contain("One Piece");
             stored.TrackingMode.Should().Be(MangaTrackingMode.Volume);
             stored.Tags.Should().BeEquivalentTo(new[] { 2, 5 });
+            stored.UserAliases.Should().Contain("OP");
         }
 
         [Test]
@@ -77,6 +78,7 @@ namespace NzbDrone.Core.Test.Manga
                 PreferredTitle = "One Piece",
                 CleanTitle = "one piece",
                 Synonyms = new List<string> { "One Piece" },
+                UserAliases = new List<string> { "OP" },
                 Tags = new List<int> { 2, 5 },
                 TrackingMode = MangaTrackingMode.Volume,
                 Monitored = true,

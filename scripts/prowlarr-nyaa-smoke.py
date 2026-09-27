@@ -79,6 +79,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", default="komarr:local", help="Built Komarr image")
     parser.add_argument("--query", default="One Piece", help="Live manga query")
+    parser.add_argument("--manga-id", type=int, help="AniList ID for manga title search")
     args = parser.parse_args()
     suffix = uuid.uuid4().hex[:8]
     network = f"komarr-proof-{suffix}"
@@ -152,6 +153,32 @@ def main():
             print(f"Prowlarr synced Nyaa to Komarr; {result['total']} raw releases for {args.query!r}.")
             for release in books[:3]:
                 print(f"  {release['title']} | {release['indexer']} | {release['categories']}")
+
+            if args.manga_id:
+                _, manga = api(
+                    komarr_url, komarr_key, "/api/v1/manga", "POST",
+                    {"aniListId": args.manga_id},
+                )
+                _, search = api(
+                    komarr_url, komarr_key, f"/api/v1/manga/{manga['id']}/search"
+                )
+                if not search["queries"] or len(search["queries"]) > 3:
+                    raise RuntimeError(f"Unbounded manga queries: {search['queries']}")
+                manga_books = [
+                    release for release in search["releases"]
+                    if any(7000 <= category < 8000 for category in release["categories"])
+                ]
+                if not manga_books:
+                    raise RuntimeError(
+                        f"No Books results for {manga['preferredTitle']!r}: "
+                        f"{search['indexerErrors']}"
+                    )
+                print(
+                    f"Manga search for {manga['preferredTitle']!r}: "
+                    f"{len(search['queries'])} queries, {len(manga_books)} Books releases."
+                )
+                for release in manga_books[:3]:
+                    print(f"  {release['title']} | {release['indexer']} | {release['categories']}")
         finally:
             for container in (prowlarr, komarr):
                 subprocess.run(["docker", "rm", "-f", container],

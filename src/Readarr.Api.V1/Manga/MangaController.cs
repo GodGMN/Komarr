@@ -20,6 +20,7 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaHistoryService _history;
         private readonly IMangaBlocklistService _blocklist;
         private readonly IMangaWantedService _wanted;
+        private readonly IMangaLibraryScanService _libraryScan;
 
         public MangaController(
             IMangaService manga,
@@ -29,7 +30,8 @@ namespace Readarr.Api.V1.Manga
             IMangaDownloadFileRepository downloadFiles,
             IMangaHistoryService history,
             IMangaBlocklistService blocklist,
-            IMangaWantedService wanted)
+            IMangaWantedService wanted,
+            IMangaLibraryScanService libraryScan)
         {
             _manga = manga;
             _search = search;
@@ -39,6 +41,7 @@ namespace Readarr.Api.V1.Manga
             _history = history;
             _blocklist = blocklist;
             _wanted = wanted;
+            _libraryScan = libraryScan;
         }
 
         [HttpGet]
@@ -51,6 +54,12 @@ namespace Readarr.Api.V1.Manga
         public IEnumerable<MangaWantedItem> GetWanted()
         {
             return _wanted.GetMissing();
+        }
+
+        [HttpGet("library-scan")]
+        public MangaLibraryScanResult ScanLibrary()
+        {
+            return _libraryScan.Scan();
         }
 
         [HttpGet("{id:int}")]

@@ -1,0 +1,12 @@
+services:
+  komarr:
+    image: ghcr.io/godgmn/komarr:${KOMARR_TAG:-edge}
+    ports:
+      - "0.0.0.0:${KOMARR_PORT:-8787}:8787"
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - ${KOMARR_CONFIG:-./docker-config}:/config
+      - ${KOMARR_MANGA:-./docker-manga}:/manga
+      - ${KOMARR_DOWNLOADS:-./docker-downloads}:/downloads
+    restart: unless-stopped

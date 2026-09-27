@@ -6,7 +6,9 @@ The project is an early alpha. The [product requirements](docs/PRD.md) describe 
 
 Komarr uses a fresh `komarr.db` in its own application data directory. Existing Readarr and Librarr databases are not migrated. The inherited in-app updater and metadata connectivity probe are disabled while their Komarr replacements are developed.
 
-To run Komarr in Docker, see the [Docker instructions](distribution/docker/README.md). Open **Manga → Setup** to check local storage, indexers, download clients, AniList metadata, and backups. Add Prowlarr's Torznab or Newznab feed as an indexer; the [Prowlarr to Nyaa proof](docs/integrations/prowlarr-nyaa.md) documents the integration. Backups contain the database and config, which can include API and download-client credentials, so store them privately.
+Start with the [installation and first-run guide](docs/getting-started.md), or use the [Docker build instructions](distribution/docker/README.md). Open **Manga → Setup & Health** to check local storage, indexers, download clients, AniList metadata, and backups. Add Prowlarr's Torznab or Newznab feed as an indexer; the [Prowlarr to Nyaa proof](docs/integrations/prowlarr-nyaa.md) documents the integration. Backups contain the database and config, which can include API and download-client credentials, so store them privately. See the [UI screenshots](docs/screenshots/README.md) and [alpha release notes](docs/releases/v0.1.0-alpha.1.md).
+
+Contributors can start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [manga release fixture guide](docs/contributing-fixtures.md).
 
 ## Principles
 

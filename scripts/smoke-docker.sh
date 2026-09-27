@@ -94,5 +94,15 @@ if [[ "$run_browser" == "--browser" ]]; then
 fi
 docker stop "$name" >/dev/null
 container_running=0
+for attempt in $(seq 1 40); do
+  if ! docker inspect "$name" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.25
+done
+if docker inspect "$name" >/dev/null 2>&1; then
+  echo "Stopped Komarr container was not removed before restart" >&2
+  exit 1
+fi
 start_container
 check_api verify

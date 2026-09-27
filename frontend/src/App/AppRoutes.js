@@ -26,7 +26,7 @@ import MediaManagementConnector from 'Settings/MediaManagement/MediaManagementCo
 import MetadataSettings from 'Settings/Metadata/MetadataSettings';
 import NotificationSettings from 'Settings/Notifications/NotificationSettings';
 import Profiles from 'Settings/Profiles/Profiles';
-import QualityConnector from 'Settings/Quality/QualityConnector';
+import Quality from 'Settings/Quality/Quality';
 import Settings from 'Settings/Settings';
 import TagSettings from 'Settings/Tags/TagSettings';
 import UISettingsConnector from 'Settings/UI/UISettingsConnector';
@@ -192,7 +192,7 @@ function AppRoutes(props) {
 
       <Route
         path="/settings/quality"
-        component={QualityConnector}
+        component={Quality}
       />
 
       <Route

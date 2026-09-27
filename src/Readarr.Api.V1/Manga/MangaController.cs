@@ -42,6 +42,17 @@ namespace Readarr.Api.V1.Manga
             return _manga.GetItems(id).ToList();
         }
 
+        [HttpGet("{id:int}/files")]
+        public ActionResult<IEnumerable<MangaFile>> GetFiles(int id)
+        {
+            if (_manga.Find(id) == null)
+            {
+                return NotFound();
+            }
+
+            return _manga.GetFiles(id).ToList();
+        }
+
         [HttpPost]
         public ActionResult<NzbDrone.Core.Manga.Manga> Add([FromBody] MangaAddOptions options)
         {

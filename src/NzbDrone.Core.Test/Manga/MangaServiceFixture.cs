@@ -14,6 +14,7 @@ namespace NzbDrone.Core.Test.Manga
     {
         private Mock<IMangaRepository> _repository;
         private Mock<IMangaItemRepository> _items;
+        private Mock<IMangaFileRepository> _files;
         private Mock<IAniListMetadataClient> _metadata;
         private MangaService _service;
 
@@ -22,8 +23,9 @@ namespace NzbDrone.Core.Test.Manga
         {
             _repository = new Mock<IMangaRepository>();
             _items = new Mock<IMangaItemRepository>();
+            _files = new Mock<IMangaFileRepository>();
             _metadata = new Mock<IAniListMetadataClient>();
-            _service = new MangaService(_repository.Object, _items.Object, _metadata.Object);
+            _service = new MangaService(_repository.Object, _items.Object, _files.Object, _metadata.Object);
         }
 
         [Test]

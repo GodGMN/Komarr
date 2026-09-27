@@ -14,6 +14,9 @@ import NotFound from 'Components/NotFound';
 import Switch from 'Components/Router/Switch';
 import LibraryImportConnector from 'LibraryImport/LibraryImportConnector';
 import LibraryImportSelectFolderConnector from 'LibraryImport/LibraryImportSelectFolderConnector';
+import MangaAddPage from 'Manga/MangaAddPage';
+import MangaDetailsPage from 'Manga/MangaDetailsPage';
+import MangaIndexPage from 'Manga/MangaIndexPage';
 import NarratorDetailsPage from 'Narrator/NarratorDetailsPage';
 import AddNewItemConnector from 'Search/AddNewItemConnector';
 import CustomFormatSettingsConnector from 'Settings/CustomFormats/CustomFormatSettingsConnector';
@@ -55,7 +58,7 @@ function AppRoutes(props) {
       <Route
         exact={true}
         path="/"
-        component={AuthorIndexConnector}
+        component={MangaIndexPage}
       />
 
       {
@@ -78,6 +81,23 @@ function AppRoutes(props) {
       <Route
         path="/authors"
         component={AuthorIndexConnector}
+      />
+
+      <Route
+        exact={true}
+        path="/manga"
+        component={MangaIndexPage}
+      />
+
+      <Route
+        exact={true}
+        path="/manga/add"
+        component={MangaAddPage}
+      />
+
+      <Route
+        path="/manga/:id"
+        component={MangaDetailsPage}
       />
 
       <Route

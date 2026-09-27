@@ -15,12 +15,16 @@ try {
   assert.match(await page.title(), /Komarr/);
   await page.locator('#root > *').first().waitFor({ timeout: 30000 });
 
+  await page.goto(`${baseUrl}/manga/add`, { waitUntil: 'networkidle' });
+  await page.getByRole('searchbox', { name: 'Search manga' }).waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /AniList.*exact manga/);
+
   await page.goto(`${baseUrl}/settings/quality`, { waitUntil: 'networkidle' });
   await page.getByText('Manga Quality').first().waitFor({ timeout: 30000 });
   const qualityPage = await page.locator('body').innerText();
   assert.doesNotMatch(qualityPage, /Unknown Audio|book duration|Kilobits Per Second/);
   assert.equal(errors.length, 0, `Browser errors: ${errors.join('; ')}`);
-  console.log('Playwright smoke: Komarr UI and manga quality page rendered without browser errors');
+  console.log('Playwright smoke: manga add and quality pages rendered without browser errors');
 } finally {
   await browser.close();
 }

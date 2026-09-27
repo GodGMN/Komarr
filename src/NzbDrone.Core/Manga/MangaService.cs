@@ -40,18 +40,21 @@ namespace NzbDrone.Core.Manga
         Manga Refresh(int id);
         void Delete(int id);
         IEnumerable<MangaItem> GetItems(int mangaId);
+        IEnumerable<MangaFile> GetFiles(int mangaId);
     }
 
     public class MangaService : IMangaService
     {
         private readonly IMangaRepository _repository;
         private readonly IMangaItemRepository _items;
+        private readonly IMangaFileRepository _files;
         private readonly IAniListMetadataClient _metadata;
 
-        public MangaService(IMangaRepository repository, IMangaItemRepository items, IAniListMetadataClient metadata)
+        public MangaService(IMangaRepository repository, IMangaItemRepository items, IMangaFileRepository files, IAniListMetadataClient metadata)
         {
             _repository = repository;
             _items = items;
+            _files = files;
             _metadata = metadata;
         }
 
@@ -62,6 +65,8 @@ namespace NzbDrone.Core.Manga
         public Manga FindByAniListId(int id) => _repository.FindByAniListId(id);
 
         public IEnumerable<MangaItem> GetItems(int mangaId) => _items.GetByMangaId(mangaId);
+
+        public IEnumerable<MangaFile> GetFiles(int mangaId) => _files.GetByMangaId(mangaId);
 
         public Manga Add(MangaAddOptions options)
         {

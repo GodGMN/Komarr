@@ -2,7 +2,6 @@
 """Check a populated alpha database, upgrade, and real backup restore."""
 
 import argparse
-import io
 import json
 import os
 import pathlib

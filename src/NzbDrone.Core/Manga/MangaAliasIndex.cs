@@ -18,9 +18,9 @@ namespace NzbDrone.Core.Manga
         private readonly Dictionary<string, HashSet<int>> _prefix = new (StringComparer.Ordinal);
         private readonly Dictionary<int, Manga> _manga = new ();
 
-        public MangaAliasIndex(IEnumerable<Manga> manga)
+        public MangaAliasIndex(IEnumerable<Manga> manga, bool includeUnmonitored = false)
         {
-            foreach (var title in manga.Where(value => value.Monitored))
+            foreach (var title in manga.Where(value => includeUnmonitored || value.Monitored))
             {
                 _manga[title.Id] = title;
                 foreach (var alias in MangaReleaseMatcher.GetAliasTitles(title))

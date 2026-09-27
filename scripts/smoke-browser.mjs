@@ -38,6 +38,21 @@ try {
     contentType: 'application/json',
     body: JSON.stringify(data)
   });
+  await page.route(/\/api\/v1\/manga\/library-scan$/, route => reply(route, {
+    rootsScanned: 1,
+    truncated: false,
+    errors: [],
+    folders: [{
+      rootPath: '/manga', path: '/manga/BLAME!', name: 'BLAME!', mappedMangaId: null,
+      suggestedMangaId: 123, suggestedTitle: 'BLAME!', needsReview: true, truncated: false,
+      files: [{ path: '/manga/BLAME!/v01.cbz', name: 'v01.cbz', parsedTitle: 'BLAME!',
+        unitType: 0, startNumber: '01', endNumber: '01' }]
+    }]
+  }));
+  await page.goto(`${baseUrl}/manga/library-scan`, { waitUntil: 'networkidle' });
+  await page.getByText(/Read-only inventory of configured roots/).waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /1 unmapped/);
+  assert.match(await page.locator('body').innerText(), /v01.cbz · Volume 01/);
   await page.route(/\/api\/v1\/manga\/123$/, route => reply(route, {
     id: 123, aniListId: 30149, preferredTitle: 'BLAME!', titleRomaji: 'BLAME!',
     trackingMode: 0, monitored: true, aniListVolumeCount: 10
@@ -146,7 +161,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Send to Download Client' }).isEnabled(), true);
   assert.match(await page.locator('body').innerText(), /Known items covered: Volume 1/);
   assert.equal(errors.length, 0, `Browser errors: ${errors.join('; ')}`);
-  console.log('Playwright smoke: manga add, quality, and release review rendered without browser errors');
+  console.log('Playwright smoke: manga inventory, add, quality, and release review rendered without browser errors');
 } finally {
   await browser.close();
 }

@@ -33,7 +33,7 @@ namespace NzbDrone.Core.MetadataSource
     // change rather than a correctness fix. Revisit when that legacy path goes.
     public static class MetadataUserAgent
     {
-        public const string ContactUrl = "https://github.com/Rorqualx/Librarr";
+        public const string ContactUrl = "https://github.com/GodGMN/Komarr";
 
         public static string Value => $"{BuildInfo.AppName}/{BuildInfo.Version} (+{ContactUrl})";
 

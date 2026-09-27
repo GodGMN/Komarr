@@ -27,6 +27,7 @@ namespace Readarr.Api.V1.Calendar
             _tagService = tagService;
         }
 
+        [HttpGet("Komarr.ics")]
         [HttpGet("Librarr.ics")]
         [HttpGet("Readarr.ics")] // back-compat for clients that subscribed before the rebrand
         public IActionResult GetCalendarFeed(int pastDays = 7, int futureDays = 28, string tagList = "", bool unmonitored = false)

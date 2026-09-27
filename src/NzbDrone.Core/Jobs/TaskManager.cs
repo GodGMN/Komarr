@@ -16,7 +16,6 @@ using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
-using NzbDrone.Core.Update.Commands;
 
 namespace NzbDrone.Core.Jobs
 {
@@ -76,12 +75,6 @@ namespace NzbDrone.Core.Jobs
                     {
                         Interval = 5,
                         TypeName = typeof(MessagingCleanupCommand).FullName
-                    },
-
-                    new ScheduledTask
-                    {
-                        Interval = 6 * 60,
-                        TypeName = typeof(ApplicationUpdateCheckCommand).FullName
                     },
 
                     new ScheduledTask

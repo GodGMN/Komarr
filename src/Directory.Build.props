@@ -91,9 +91,9 @@
 
   <!-- Set the Product and Version info for our own projects -->
   <PropertyGroup Condition="'$(ReadarrProject)'=='true'">
-    <Product>Librarr</Product>
-    <Company>Librarr Project</Company>
-    <Copyright>Copyright 2017-2025 readarr.com, 2026-$([System.DateTime]::Now.ToString('yyyy')) Librarr Project (GNU General Public v3)</Copyright>
+    <Product>Komarr</Product>
+    <Company>Komarr Project</Company>
+    <Copyright>Copyright 2017-2025 readarr.com, 2026-$([System.DateTime]::Now.ToString('yyyy')) Komarr Project (GNU General Public v3)</Copyright>
 
     <!-- Should be replaced by CI -->
     <AssemblyVersion>10.0.0.*</AssemblyVersion>

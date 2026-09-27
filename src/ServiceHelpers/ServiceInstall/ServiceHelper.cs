@@ -8,7 +8,7 @@ namespace ServiceInstall
 {
     public static class ServiceHelper
     {
-        private static string ReadarrExe => Path.Combine(new FileInfo(Assembly.GetExecutingAssembly().Location).Directory.FullName, "Readarr.Console.exe");
+        private static string KomarrExe => Path.Combine(new FileInfo(Assembly.GetExecutingAssembly().Location).Directory.FullName, "Komarr.Console.exe");
 
         private static bool IsAnAdministrator()
         {
@@ -18,9 +18,9 @@ namespace ServiceInstall
 
         public static void Run(string arg)
         {
-            if (!File.Exists(ReadarrExe))
+            if (!File.Exists(KomarrExe))
             {
-                Console.WriteLine("Unable to find Readarr.Console.exe in the current directory.");
+                Console.WriteLine("Unable to find Komarr.Console.exe in the current directory.");
                 return;
             }
 
@@ -32,7 +32,7 @@ namespace ServiceInstall
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = ReadarrExe,
+                FileName = KomarrExe,
                 Arguments = arg,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

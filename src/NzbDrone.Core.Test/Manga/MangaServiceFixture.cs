@@ -119,14 +119,17 @@ namespace NzbDrone.Core.Test.Manga
             _service.Update(7, new MangaAddOptions
             {
                 AniListId = 30149,
-                UserAliases = new List<string> { "  Buramu!  ", "buramu", "BLAME!" }
+                UserAliases = new List<string> { "  Buramu!  ", "buramu", "BLAME!" },
+                QualityPolicy = new MangaReleasePolicy { AllowedLanguages = new List<string> { "English" } }
             });
 
             existing.UserAliases.Should().Equal("Buramu!", "BLAME!");
+            existing.QualityPolicy.AllowedLanguages.Should().Contain("English");
 
             _service.Update(7, new MangaAddOptions { AniListId = 30149 });
 
             existing.UserAliases.Should().Equal("Buramu!", "BLAME!");
+            existing.QualityPolicy.AllowedLanguages.Should().Contain("English");
         }
     }
 }

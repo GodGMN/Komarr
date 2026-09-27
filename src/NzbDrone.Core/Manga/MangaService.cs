@@ -18,6 +18,7 @@ namespace NzbDrone.Core.Manga
         public int? MetadataProfileId { get; set; }
         public List<int> Tags { get; set; } = new ();
         public List<string> UserAliases { get; set; }
+        public MangaReleasePolicy QualityPolicy { get; set; }
     }
 
     public class MangaMetadataException : Exception
@@ -165,6 +166,11 @@ namespace NzbDrone.Core.Manga
                     .DistinctBy(MangaReleaseMatcher.Normalize)
                     .Take(20)
                     .ToList();
+            }
+
+            if (options.QualityPolicy != null)
+            {
+                manga.QualityPolicy = options.QualityPolicy;
             }
 
             if (!string.IsNullOrWhiteSpace(options.PreferredTitle))

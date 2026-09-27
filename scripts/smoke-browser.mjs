@@ -44,6 +44,18 @@ try {
   await page.route(/\/api\/v1\/manga$/, route => reply(route, [
     { id: 123, aniListId: 30149, preferredTitle: 'BLAME!', monitored: true }
   ]));
+  await page.route(/\/api\/v1\/manga\/setup$/, route => reply(route, {
+    readyForLocalUse: true,
+    backupWarning: 'Backups can contain credentials. Store them privately.',
+    checks: [
+      { key: 'roots', label: 'Manga root folders', state: 'ready', message: '1 root is accessible.', link: '/settings/mediamanagement' },
+      { key: 'anilist', label: 'AniList metadata', state: 'warning',
+        message: 'AniList is unavailable. Saved manga still work.', link: '/manga/add' }
+    ]
+  }));
+  await page.goto(`${baseUrl}/manga/setup`, { waitUntil: 'networkidle' });
+  await page.getByText('Ready for local manga acquisition').waitFor({ timeout: 30000 });
+  assert.match(await page.locator('body').innerText(), /AniList is unavailable/);
   await page.route(/\/api\/v1\/manga\/library-scan$/, route => reply(route, {
     rootsScanned: 1,
     truncated: false,

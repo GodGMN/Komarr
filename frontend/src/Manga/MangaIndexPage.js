@@ -36,6 +36,7 @@ class MangaIndexPage extends Component {
         <PageContentBody>
           <div className={styles.toolbar}>
             <p className={styles.intro}>Your monitored manga and local collection.</p>
+            <Link to="/manga/setup" className={styles.button}>Setup &amp; Health</Link>
             <Link to="/manga/library-scan" className={styles.button}>Scan Existing Files</Link>
             <Link to="/manga/add" className={styles.primaryButton}>Add Manga</Link>
           </div>

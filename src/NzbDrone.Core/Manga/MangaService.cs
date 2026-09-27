@@ -102,7 +102,9 @@ namespace NzbDrone.Core.Manga
             };
             ApplyMetadata(manga, media);
             ApplyOptions(manga, options);
-            return _repository.Insert(manga);
+            manga = _repository.Insert(manga);
+            SyncKnownItems(manga);
+            return manga;
         }
 
         public Manga Update(int id, MangaAddOptions options)
@@ -134,7 +136,9 @@ namespace NzbDrone.Core.Manga
             }
 
             ApplyMetadata(manga, media);
-            return _repository.Update(manga);
+            manga = _repository.Update(manga);
+            SyncKnownItems(manga);
+            return manga;
         }
 
         public void Delete(int id)
@@ -200,6 +204,41 @@ namespace NzbDrone.Core.Manga
             manga.BannerUrl = media.BannerUrl;
             manga.AniListUpdatedAt = media.UpdatedAt;
             manga.LastInfoSync = DateTime.UtcNow;
+        }
+
+        private void SyncKnownItems(Manga manga)
+        {
+            var count = manga.TrackingMode == MangaTrackingMode.Volume ? manga.AniListVolumeCount : manga.AniListChapterCount;
+            var limit = manga.TrackingMode == MangaTrackingMode.Volume ? 500 : 2000;
+            if (!count.HasValue || count.Value <= 0 || count.Value > limit)
+            {
+                return;
+            }
+
+            var type = manga.TrackingMode == MangaTrackingMode.Volume ? MangaItemType.Volume : MangaItemType.Chapter;
+            var existing = (_items.GetByMangaId(manga.Id) ?? Enumerable.Empty<MangaItem>())
+                .Where(item => item.Type == type && item.NumberDecimal.HasValue && item.NumberDecimal.Value >= 1 &&
+                    item.NumberDecimal.Value <= limit && item.NumberDecimal.Value == decimal.Truncate(item.NumberDecimal.Value))
+                .Select(item => (int)item.NumberDecimal.Value)
+                .ToHashSet();
+            for (var number = 1; number <= count.Value; number++)
+            {
+                if (existing.Contains(number))
+                {
+                    continue;
+                }
+
+                var item = new MangaItem
+                {
+                    MangaId = manga.Id,
+                    Type = type,
+                    Monitored = manga.Monitored,
+                    DiscoveredFrom = MangaItemDiscoverySource.Metadata,
+                    Added = DateTime.UtcNow
+                };
+                item.SetNumber(number.ToString());
+                _items.Insert(item);
+            }
         }
     }
 }

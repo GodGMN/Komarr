@@ -64,6 +64,7 @@ namespace NzbDrone.Core.Test.Manga
             manga.Synonyms.Should().Contain("Buramu!");
             manga.AniListVolumeCount.Should().Be(10);
             _repository.Verify(x => x.Insert(It.Is<MangaModel>(m => m.AniListId == 30149)), Times.Once());
+            _items.Verify(x => x.Insert(It.IsAny<MangaItem>()), Times.Exactly(10));
         }
 
         [Test]
@@ -96,6 +97,28 @@ namespace NzbDrone.Core.Test.Manga
 
             manga.Description.Should().Be("Local description");
             _repository.Verify(x => x.Update(It.IsAny<MangaModel>()), Times.Never());
+        }
+
+        [Test]
+        public void Refresh_adds_missing_known_volumes_without_replacing_existing_items()
+        {
+            var existing = new MangaModel { Id = 7, AniListId = 30149, PreferredTitle = "BLAME!", Monitored = true };
+            var first = new MangaItem { Id = 10, MangaId = 7, Type = MangaItemType.Volume, Monitored = false };
+            first.SetNumber("1");
+            _repository.Setup(x => x.Find(7)).Returns(existing);
+            _repository.Setup(x => x.Update(It.IsAny<MangaModel>())).Returns<MangaModel>(manga => manga);
+            _items.Setup(x => x.GetByMangaId(7)).Returns(new[] { first });
+            _metadata.Setup(x => x.GetById(30149, true)).Returns(new AniListResult
+            {
+                Availability = AniListAvailability.Available,
+                Media = new List<AniListMedia> { new AniListMedia { Id = 30149, TitleRomaji = "BLAME!", Volumes = 2 } }
+            });
+
+            _service.Refresh(7);
+
+            first.Monitored.Should().BeFalse();
+            _items.Verify(x => x.Insert(It.Is<MangaItem>(item => item.NumberText == "2" && item.MangaId == 7)), Times.Once());
+            _items.Verify(x => x.Insert(It.Is<MangaItem>(item => item.NumberText == "1")), Times.Never());
         }
 
         [Test]

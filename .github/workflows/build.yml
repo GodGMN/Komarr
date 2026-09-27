@@ -28,7 +28,7 @@ jobs:
       - run: python3 scripts/check_manga_fixtures.py
       - run: python3 -m unittest discover -s tests/Parser -p 'test_*.py'
       - run: dotnet build src/Readarr.sln -c Release -p:Platform=Posix -v quiet
-      - run: dotnet test src/NzbDrone.Core.Test/Readarr.Core.Test.csproj -c Release -p:Platform=Posix --filter 'FullyQualifiedName~UpdatePackageProviderFixture|FullyQualifiedName~MetadataSourceConnectivityCheckFixture|FullyQualifiedName~MetadataUserAgentFixture|FullyQualifiedName~MangaPersistenceFixture|FullyQualifiedName~AniListMetadataClientFixture|FullyQualifiedName~MangaServiceFixture|FullyQualifiedName~MangaReleaseParserFixture|FullyQualifiedName~MangaReleaseMatcherFixture|FullyQualifiedName~MangaIndexerSearchFixture|FullyQualifiedName~MangaReleaseDecisionFixture|FullyQualifiedName~NewznabRequestGeneratorFixture' -v quiet
+      - run: dotnet test src/NzbDrone.Core.Test/Readarr.Core.Test.csproj -c Release -p:Platform=Posix --filter 'FullyQualifiedName~UpdatePackageProviderFixture|FullyQualifiedName~MetadataSourceConnectivityCheckFixture|FullyQualifiedName~MetadataUserAgentFixture|FullyQualifiedName~MangaPersistenceFixture|FullyQualifiedName~AniListMetadataClientFixture|FullyQualifiedName~MangaServiceFixture|FullyQualifiedName~MangaReleaseParserFixture|FullyQualifiedName~MangaReleaseMatcherFixture|FullyQualifiedName~MangaIndexerSearchFixture|FullyQualifiedName~MangaReleaseDecisionFixture|FullyQualifiedName~MangaInteractiveSearchFixture|FullyQualifiedName~NewznabRequestGeneratorFixture' -v quiet
 
   e2e-smoke:
     name: E2E smoke

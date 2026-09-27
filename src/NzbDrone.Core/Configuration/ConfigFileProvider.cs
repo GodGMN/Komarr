@@ -156,7 +156,7 @@ namespace NzbDrone.Core.Configuration
         {
             get
             {
-                const string defaultValue = "*";
+                const string defaultValue = "0.0.0.0";
 
                 var bindAddress = _serverOptions.BindAddress ?? GetValue("BindAddress", defaultValue);
                 if (string.IsNullOrWhiteSpace(bindAddress))

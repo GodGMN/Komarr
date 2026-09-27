@@ -14,11 +14,13 @@ namespace Readarr.Api.V1.Manga
     {
         private readonly IMangaService _manga;
         private readonly IMangaIndexerSearchService _search;
+        private readonly IMangaInteractiveSearchService _interactiveSearch;
 
-        public MangaController(IMangaService manga, IMangaIndexerSearchService search)
+        public MangaController(IMangaService manga, IMangaIndexerSearchService search, IMangaInteractiveSearchService interactiveSearch)
         {
             _manga = manga;
             _search = search;
+            _interactiveSearch = interactiveSearch;
         }
 
         [HttpGet]
@@ -66,6 +68,23 @@ namespace Readarr.Api.V1.Manga
             }
 
             return await _search.Search(manga);
+        }
+
+        [HttpGet("{id:int}/search/decisions")]
+        public async Task<ActionResult<MangaInteractiveSearchResult>> SearchDecisions(int id, [FromQuery] int? itemId)
+        {
+            try
+            {
+                return await _interactiveSearch.Search(id, itemId);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpPost]

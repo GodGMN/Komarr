@@ -159,6 +159,12 @@ def main():
                     komarr_url, komarr_key, "/api/v1/manga", "POST",
                     {"aniListId": args.manga_id},
                 )
+                _, known_items = api(
+                    komarr_url, komarr_key, f"/api/v1/manga/{manga['id']}/items"
+                )
+                if manga.get("aniListVolumeCount") and len(known_items) != manga["aniListVolumeCount"]:
+                    raise RuntimeError("Known AniList volumes were not created as manga items")
+                print(f"Saved {len(known_items)} known items for {manga['preferredTitle']!r}.")
                 _, search = api(
                     komarr_url, komarr_key, f"/api/v1/manga/{manga['id']}/search"
                 )
@@ -179,6 +185,31 @@ def main():
                 )
                 for release in manga_books[:3]:
                     print(f"  {release['title']} | {release['indexer']} | {release['categories']}")
+
+                _, reviewed = api(
+                    komarr_url, komarr_key,
+                    f"/api/v1/manga/{manga['id']}/search/decisions",
+                )
+                if not reviewed["releases"]:
+                    raise RuntimeError("Manga decision search returned no releases")
+                if not any(
+                    item["decision"]["rejections"] or
+                    item["decision"]["reviewReasons"]
+                    for item in reviewed["releases"]
+                ):
+                    raise RuntimeError("Manga decision search omitted rejection reasons")
+                accepted = sum(
+                    item["decision"]["canGrabAutomatically"]
+                    for item in reviewed["releases"]
+                )
+                print(
+                    f"Decision search: {reviewed['total']} releases, "
+                    f"{accepted} automatic candidates, reasons on other results."
+                )
+                for item in reviewed["releases"][:3]:
+                    decision = item["decision"]
+                    reasons = decision["rejections"] or decision["reviewReasons"]
+                    print(f"  {item['title']}: {reasons[0] if reasons else 'eligible'}")
         finally:
             for container in (prowlarr, komarr):
                 subprocess.run(["docker", "rm", "-f", container],

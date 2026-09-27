@@ -16,17 +16,20 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaIndexerSearchService _search;
         private readonly IMangaInteractiveSearchService _interactiveSearch;
         private readonly IMangaGrabService _grab;
+        private readonly IMangaDownloadFileRepository _downloadFiles;
 
         public MangaController(
             IMangaService manga,
             IMangaIndexerSearchService search,
             IMangaInteractiveSearchService interactiveSearch,
-            IMangaGrabService grab)
+            IMangaGrabService grab,
+            IMangaDownloadFileRepository downloadFiles)
         {
             _manga = manga;
             _search = search;
             _interactiveSearch = interactiveSearch;
             _grab = grab;
+            _downloadFiles = downloadFiles;
         }
 
         [HttpGet]
@@ -104,6 +107,18 @@ namespace Readarr.Api.V1.Manga
             {
                 return NotFound();
             }
+        }
+
+        [HttpGet("{id:int}/downloads/{downloadId:int}/files")]
+        public ActionResult<IEnumerable<MangaDownloadFile>> GetDownloadFiles(int id, int downloadId)
+        {
+            if (_manga.Find(id) == null)
+            {
+                return NotFound();
+            }
+
+            var download = _grab.GetDownloads(id).FirstOrDefault(value => value.Id == downloadId);
+            return download == null ? NotFound() : _downloadFiles.GetByDownloadId(downloadId).ToList();
         }
 
         [HttpPost("{id:int}/grab")]

@@ -5,6 +5,7 @@ import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import PageContent from 'Components/Page/PageContent';
 import PageContentBody from 'Components/Page/PageContentBody';
 import createAjaxRequest from 'Utilities/createAjaxRequest';
+import MangaDownloadFiles from './MangaDownloadFiles';
 import MangaReleaseSearch from './MangaReleaseSearch';
 import styles from './Manga.css';
 
@@ -26,6 +27,7 @@ class MangaDetailsPage extends Component {
   componentWillUnmount() {
     this.requests?.forEach((request) => request.abortRequest());
     this.refreshRequest?.abortRequest();
+    this.downloadRequest?.abortRequest();
   }
 
   load = () => {
@@ -61,6 +63,17 @@ class MangaDetailsPage extends Component {
 
   onGrabbed = (download) => {
     this.setState((state) => ({ downloads: [...state.downloads, download] }));
+  };
+
+  onRefreshDownloads = () => {
+    const { id } = this.props.match.params;
+    this.downloadRequest?.abortRequest();
+    this.downloadRequest = createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' });
+    this.downloadRequest.request.then((downloads) => this.setState({ downloads: downloads || [] })).catch((xhr) => {
+      if (!xhr.aborted) {
+        this.setState({ error: 'Could not refresh manga downloads.' });
+      }
+    });
   };
 
   render() {
@@ -120,12 +133,19 @@ class MangaDetailsPage extends Component {
 
               <section className={styles.section}>
                 <h2>Downloads</h2>
+                <button className={styles.button}
+                  type="button"
+                  onClick={this.onRefreshDownloads}
+                >
+                  Refresh Downloads
+                </button>
                 {downloads.length === 0 ?
                   <p className={styles.muted}>No manga releases sent to a download client yet.</p> :
                   <ul className={styles.list}>
                     {downloads.map((download) => (
                       <li key={download.id || download.downloadId}>
                         {download.releaseTitle} · {download.downloadClient} · {downloadStatus(download.status)}
+                        {download.status === 2 && <MangaDownloadFiles mangaId={manga.id} downloadId={download.id} />}
                       </li>
                     ))}
                   </ul>}

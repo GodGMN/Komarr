@@ -5,6 +5,7 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.TPL;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Manga;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
@@ -26,6 +27,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         private readonly IFailedDownloadService _failedDownloadService;
         private readonly ICompletedDownloadService _completedDownloadService;
         private readonly ITrackedDownloadService _trackedDownloadService;
+        private readonly IMangaDownloadRepository _mangaDownloads;
         private readonly Logger _logger;
         private readonly Debouncer _refreshDebounce;
 
@@ -37,6 +39,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
                                          IFailedDownloadService failedDownloadService,
                                          ICompletedDownloadService completedDownloadService,
                                          ITrackedDownloadService trackedDownloadService,
+                                         IMangaDownloadRepository mangaDownloads,
                                          Logger logger)
         {
             _downloadClientStatusService = downloadClientStatusService;
@@ -47,6 +50,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
             _failedDownloadService = failedDownloadService;
             _completedDownloadService = completedDownloadService;
             _trackedDownloadService = trackedDownloadService;
+            _mangaDownloads = mangaDownloads;
             _logger = logger;
 
             _refreshDebounce = new Debouncer(QueueRefresh, TimeSpan.FromSeconds(5));
@@ -113,6 +117,13 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         {
             try
             {
+                // Manga downloads have their own file identification and import path.
+                // Never pass them to the inherited book import/removal pipeline.
+                if (_mangaDownloads.FindByDownloadId(downloadClient.Definition.Id, downloadItem.DownloadId) != null)
+                {
+                    return null;
+                }
+
                 var trackedDownload = _trackedDownloadService.TrackDownload((DownloadClientDefinition)downloadClient.Definition, downloadItem);
 
                 if (trackedDownload != null && trackedDownload.State == TrackedDownloadState.Downloading)

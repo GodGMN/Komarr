@@ -44,6 +44,7 @@ namespace NzbDrone.Core.Manga
     public interface IMangaFileRepository : IBasicRepository<MangaFile>
     {
         IEnumerable<MangaFile> GetByMangaId(int mangaId);
+        MangaFile FindByPath(string path);
     }
 
     public class MangaFileRepository : BasicRepository<MangaFile>, IMangaFileRepository
@@ -56,6 +57,11 @@ namespace NzbDrone.Core.Manga
         public IEnumerable<MangaFile> GetByMangaId(int mangaId)
         {
             return Query(x => x.MangaId == mangaId);
+        }
+
+        public MangaFile FindByPath(string path)
+        {
+            return Query(x => x.Path == path).FirstOrDefault();
         }
     }
 
@@ -82,6 +88,7 @@ namespace NzbDrone.Core.Manga
     {
         IEnumerable<MangaDownload> GetByMangaId(int mangaId);
         IEnumerable<MangaDownload> GetSent();
+        IEnumerable<MangaDownload> GetCompleted();
         MangaDownload FindByDownloadId(int clientId, string downloadId);
     }
 
@@ -100,6 +107,11 @@ namespace NzbDrone.Core.Manga
         public IEnumerable<MangaDownload> GetSent()
         {
             return Query(x => x.Status == MangaDownloadStatus.Sent);
+        }
+
+        public IEnumerable<MangaDownload> GetCompleted()
+        {
+            return Query(x => x.Status == MangaDownloadStatus.Completed);
         }
 
         public MangaDownload FindByDownloadId(int clientId, string downloadId)

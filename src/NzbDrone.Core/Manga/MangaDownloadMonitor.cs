@@ -14,6 +14,7 @@ namespace NzbDrone.Core.Manga
         private readonly IMangaDownloadRepository _downloads;
         private readonly IMangaDownloadFileRepository _files;
         private readonly IMangaDownloadFileIdentifier _identifier;
+        private readonly IMangaImportService _imports;
         private readonly IProvideDownloadClient _clients;
         private readonly IDiskProvider _disk;
         private readonly Logger _logger;
@@ -22,6 +23,7 @@ namespace NzbDrone.Core.Manga
             IMangaDownloadRepository downloads,
             IMangaDownloadFileRepository files,
             IMangaDownloadFileIdentifier identifier,
+            IMangaImportService imports,
             IProvideDownloadClient clients,
             IDiskProvider disk,
             Logger logger)
@@ -29,6 +31,7 @@ namespace NzbDrone.Core.Manga
             _downloads = downloads;
             _files = files;
             _identifier = identifier;
+            _imports = imports;
             _clients = clients;
             _disk = disk;
             _logger = logger;
@@ -69,6 +72,23 @@ namespace NzbDrone.Core.Manga
                 catch (Exception ex)
                 {
                     _logger.Warn("Could not inspect completed manga downloads for client {0}: {1}", group.Key, ex.GetType().Name);
+                }
+            }
+
+            foreach (var completed in _downloads.GetCompleted() ?? Enumerable.Empty<MangaDownload>())
+            {
+                if (!_files.GetByDownloadId(completed.Id).Any(file => file.Status == MangaDownloadFileStatus.Ready))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _imports.ImportReady(completed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn("Could not import ready manga files from download {0}: {1}", completed.Id, ex.GetType().Name);
                 }
             }
         }

@@ -130,6 +130,52 @@ namespace NzbDrone.Core.Test.Manga
             stored.CoveredItemIds.Should().Equal(11, 12);
         }
 
+        [Test]
+        public void imported_download_file_keeps_library_link_after_repository_reload()
+        {
+            var manga = Db.Insert(NewManga());
+            var volume = Db.Insert(NewItem(manga.Id, MangaItemType.Volume, "1"));
+            var libraryFile = Db.Insert(new MangaFile
+            {
+                MangaId = manga.Id,
+                Path = "/library/ONE PIECE/ONE PIECE - v01.cbz",
+                Size = 123,
+                Modified = DateTime.UtcNow,
+                DateAdded = DateTime.UtcNow,
+                OriginalFilePath = "/downloads/ONE PIECE v01.cbz"
+            });
+            Db.Insert(new MangaFileItem { MangaFileId = libraryFile.Id, MangaItemId = volume.Id });
+            var download = Db.Insert(new MangaDownload
+            {
+                MangaId = manga.Id,
+                IndexerId = 1,
+                ReleaseGuid = "guid",
+                ReleaseTitle = "ONE PIECE v01",
+                DownloadClientId = 2,
+                DownloadClient = "qBittorrent",
+                Status = MangaDownloadStatus.Completed,
+                Added = DateTime.UtcNow
+            });
+            Db.Insert(new MangaDownloadFile
+            {
+                MangaDownloadId = download.Id,
+                Path = "/downloads/ONE PIECE v01.cbz",
+                Size = 123,
+                Status = MangaDownloadFileStatus.Imported,
+                CoveredItemIds = new List<int> { volume.Id },
+                MangaFileId = libraryFile.Id,
+                ScannedAt = DateTime.UtcNow,
+                ImportedAt = DateTime.UtcNow
+            });
+
+            var stored = Mocker.Resolve<MangaDownloadFileRepository>().GetByDownloadId(download.Id).Single();
+            stored.MangaFileId.Should().Be(libraryFile.Id);
+            stored.Status.Should().Be(MangaDownloadFileStatus.Imported);
+            Mocker.Resolve<MangaFileRepository>().FindByPath(libraryFile.Path).OriginalFilePath
+                .Should().Be("/downloads/ONE PIECE v01.cbz");
+            Mocker.Resolve<MangaFileItemRepository>().GetByFileIds(new[] { libraryFile.Id }).Single().MangaItemId.Should().Be(volume.Id);
+        }
+
         private static MangaModel NewManga()
         {
             return new MangaModel

@@ -8,7 +8,7 @@ function fileName(path) {
 }
 
 function fileStatus(status) {
-  return ['Ready to import', 'Manual review', 'Unsupported'][status] || 'Unknown';
+  return ['Ready to import', 'Manual review', 'Unsupported', 'Imported'][status] || 'Unknown';
 }
 
 class MangaDownloadFiles extends Component {

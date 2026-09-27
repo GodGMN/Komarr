@@ -8,7 +8,8 @@ namespace NzbDrone.Core.Manga
     {
         Ready = 0,
         ManualReview = 1,
-        Unsupported = 2
+        Unsupported = 2,
+        Imported = 3
     }
 
     public class MangaDownloadFile : ModelBase
@@ -22,5 +23,7 @@ namespace NzbDrone.Core.Manga
         public List<int> CoveredItemIds { get; set; } = new ();
         public string Reason { get; set; }
         public DateTime ScannedAt { get; set; }
+        public int? MangaFileId { get; set; }
+        public DateTime? ImportedAt { get; set; }
     }
 }

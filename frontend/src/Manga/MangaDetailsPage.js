@@ -17,7 +17,8 @@ class MangaDetailsPage extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { manga: null, items: [], files: [], downloads: [], isLoading: true, isRefreshing: false, error: null };
+    this.state = { manga: null, items: [], files: [], downloads: [], downloadRevision: 0,
+      isLoading: true, isRefreshing: false, error: null };
   }
 
   componentDidMount() {
@@ -69,7 +70,9 @@ class MangaDetailsPage extends Component {
     const { id } = this.props.match.params;
     this.downloadRequest?.abortRequest();
     this.downloadRequest = createAjaxRequest({ url: `/manga/${id}/downloads`, method: 'GET', dataType: 'json' });
-    this.downloadRequest.request.then((downloads) => this.setState({ downloads: downloads || [] })).catch((xhr) => {
+    this.downloadRequest.request.then((downloads) => this.setState((state) => ({
+      downloads: downloads || [], downloadRevision: state.downloadRevision + 1
+    }))).catch((xhr) => {
       if (!xhr.aborted) {
         this.setState({ error: 'Could not refresh manga downloads.' });
       }
@@ -77,7 +80,7 @@ class MangaDetailsPage extends Component {
   };
 
   render() {
-    const { manga, items, files, downloads, isLoading, isRefreshing, error } = this.state;
+    const { manga, items, files, downloads, downloadRevision, isLoading, isRefreshing, error } = this.state;
     const title = manga?.preferredTitle || manga?.titleRomaji || 'Manga';
 
     return (
@@ -145,7 +148,12 @@ class MangaDetailsPage extends Component {
                     {downloads.map((download) => (
                       <li key={download.id || download.downloadId}>
                         {download.releaseTitle} · {download.downloadClient} · {downloadStatus(download.status)}
-                        {download.status === 2 && <MangaDownloadFiles mangaId={manga.id} downloadId={download.id} />}
+                        {download.status === 2 && (
+                          <MangaDownloadFiles key={`${download.id}-${downloadRevision}`}
+                            mangaId={manga.id}
+                            downloadId={download.id}
+                          />
+                        )}
                       </li>
                     ))}
                   </ul>}

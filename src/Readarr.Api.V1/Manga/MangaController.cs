@@ -21,6 +21,7 @@ namespace Readarr.Api.V1.Manga
         private readonly IMangaBlocklistService _blocklist;
         private readonly IMangaWantedService _wanted;
         private readonly IMangaLibraryScanService _libraryScan;
+        private readonly IMangaLibraryMappingService _libraryMapping;
 
         public MangaController(
             IMangaService manga,
@@ -31,7 +32,8 @@ namespace Readarr.Api.V1.Manga
             IMangaHistoryService history,
             IMangaBlocklistService blocklist,
             IMangaWantedService wanted,
-            IMangaLibraryScanService libraryScan)
+            IMangaLibraryScanService libraryScan,
+            IMangaLibraryMappingService libraryMapping)
         {
             _manga = manga;
             _search = search;
@@ -42,6 +44,7 @@ namespace Readarr.Api.V1.Manga
             _blocklist = blocklist;
             _wanted = wanted;
             _libraryScan = libraryScan;
+            _libraryMapping = libraryMapping;
         }
 
         [HttpGet]
@@ -60,6 +63,44 @@ namespace Readarr.Api.V1.Manga
         public MangaLibraryScanResult ScanLibrary()
         {
             return _libraryScan.Scan();
+        }
+
+        [HttpGet("library-scan/preview")]
+        public ActionResult<MangaLibraryMapPreview> PreviewLibraryMap([FromQuery] string folderPath, [FromQuery] int mangaId)
+        {
+            try
+            {
+                return _libraryMapping.Preview(folderPath, mangaId);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("library-scan/map")]
+        public ActionResult<MangaLibraryMapResult> MapLibraryFolder([FromBody] MangaLibraryMapRequest request)
+        {
+            try
+            {
+                return _libraryMapping.Map(request);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ex.Message);
+            }
         }
 
         [HttpGet("{id:int}")]

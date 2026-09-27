@@ -22,12 +22,15 @@ class MangaAddPage extends Component {
 
   constructor(props) {
     super(props);
+    const folderPath = new URLSearchParams(props.location.search).get('folderPath') || '';
+    const folderName = folderPath.split('/').filter(Boolean).pop() || '';
     this.state = {
-      term: '',
+      term: folderName,
       results: [],
       selected: null,
       roots: [],
-      rootFolderPath: '',
+      rootFolderPath: folderPath ? folderPath.slice(0, folderPath.lastIndexOf('/')) : '',
+      folderPath,
       trackingMode: 0,
       monitored: true,
       monitorFutureItems: true,
@@ -41,7 +44,7 @@ class MangaAddPage extends Component {
   componentDidMount() {
     this.rootsRequest = createAjaxRequest({ url: '/rootfolder', method: 'GET', dataType: 'json' });
     this.rootsRequest.request.then((roots) => {
-      this.setState({ roots: roots || [], rootFolderPath: roots?.[0]?.path || '' });
+      this.setState((state) => ({ roots: roots || [], rootFolderPath: state.rootFolderPath || roots?.[0]?.path || '' }));
     }).catch(() => {
       this.setState({ roots: [] });
     });
@@ -83,7 +86,7 @@ class MangaAddPage extends Component {
 
   onAdd = (event) => {
     event.preventDefault();
-    const { selected, rootFolderPath, trackingMode, monitored, monitorFutureItems } = this.state;
+    const { selected, rootFolderPath, folderPath, trackingMode, monitored, monitorFutureItems } = this.state;
     if (!selected || !rootFolderPath) {
       return;
     }
@@ -96,13 +99,14 @@ class MangaAddPage extends Component {
       data: JSON.stringify({
         aniListId: selected.id,
         rootFolderPath,
+        path: folderPath || undefined,
         trackingMode,
         monitored,
         monitorFutureItems
       })
     });
     this.addRequest.request.then((manga) => {
-      this.props.history.push(`/manga/${manga.id}`);
+      this.props.history.push(folderPath ? '/manga/library-scan' : `/manga/${manga.id}`);
     }).catch((xhr) => {
       if (!xhr.aborted) {
         this.setState({ isAdding: false, error: addErrorMessage(xhr.status) });
@@ -112,7 +116,7 @@ class MangaAddPage extends Component {
 
   render() {
     const {
-      term, results, selected, roots, rootFolderPath, trackingMode,
+      term, results, selected, roots, rootFolderPath, folderPath, trackingMode,
       monitored, monitorFutureItems, isSearching, isAdding, searched, error
     } = this.state;
 
@@ -122,6 +126,7 @@ class MangaAddPage extends Component {
           <p className={styles.intro}>
             Search AniList, then choose the exact manga. Komarr will not add a title from a text match alone.
           </p>
+          {folderPath && <p className={styles.muted}>Existing folder: {folderPath}. Files will be reviewed and registered separately.</p>}
 
           <form onSubmit={this.onSearch} className={styles.searchForm}>
             <input
@@ -240,7 +245,8 @@ class MangaAddPage extends Component {
 }
 
 MangaAddPage.propTypes = {
-  history: PropTypes.shape({ push: PropTypes.func.isRequired }).isRequired
+  history: PropTypes.shape({ push: PropTypes.func.isRequired }).isRequired,
+  location: PropTypes.shape({ search: PropTypes.string.isRequired }).isRequired
 };
 
 export default MangaAddPage;

@@ -43,6 +43,7 @@ namespace NzbDrone.Core.Manga
     public interface IMangaLibraryScanService
     {
         MangaLibraryScanResult Scan();
+        MangaLibraryFolder ScanFolder(string folderPath);
     }
 
     public class MangaLibraryScanService : IMangaLibraryScanService
@@ -119,7 +120,7 @@ namespace NzbDrone.Core.Manga
                         foldersInspected++;
                         try
                         {
-                            var folder = ScanFolder(root.Path, folderPath, aliases, mapped);
+                            var folder = InspectFolder(root.Path, folderPath, aliases, mapped);
                             if (folder.Files.Count > 0 || folder.Truncated)
                             {
                                 result.Folders.Add(folder);
@@ -143,7 +144,32 @@ namespace NzbDrone.Core.Manga
             return result;
         }
 
-        private MangaLibraryFolder ScanFolder(
+        public MangaLibraryFolder ScanFolder(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Path.IsPathFullyQualified(folderPath))
+            {
+                throw new ArgumentException("Choose a folder inside a configured root.");
+            }
+
+            var normalized = NormalizePath(folderPath);
+            var parent = Path.GetDirectoryName(normalized);
+            var root = _roots.All().FirstOrDefault(value =>
+                !string.IsNullOrWhiteSpace(value.Path) &&
+                string.Equals(NormalizePath(value.Path), parent, StringComparison.OrdinalIgnoreCase));
+            if (root == null || !_disk.FolderExists(normalized))
+            {
+                throw new KeyNotFoundException("Manga folder was not found directly under a configured root.");
+            }
+
+            var library = _manga.All().ToList();
+            var aliases = new MangaAliasIndex(library, true);
+            var mapped = library.Where(manga => !string.IsNullOrWhiteSpace(manga.Path))
+                .GroupBy(manga => NormalizePath(manga.Path), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First().Id, StringComparer.OrdinalIgnoreCase);
+            return InspectFolder(root.Path, normalized, aliases, mapped);
+        }
+
+        private MangaLibraryFolder InspectFolder(
             string rootPath,
             string folderPath,
             MangaAliasIndex aliases,
